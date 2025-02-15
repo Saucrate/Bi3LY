@@ -1,76 +1,86 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { sellerService } from '../services/sellerService';
+import * as ImagePicker from 'expo-image-picker';
 
 const StoreSellerProfileScreen = () => {
   const navigation = useNavigation();
+  const [loading, setLoading] = useState(true);
+  const [store, setStore] = useState(null);
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    loadStoreProfile();
+  }, []);
+
+  const loadStoreProfile = async () => {
+    try {
+      setLoading(true);
+      const response = await sellerService.getStoreProfile();
+      console.log('Store profile response:', response); // Debug için
+
+      if (response.success) {
+        // response.data direkt store objesi olduğu için düzeltme
+        setStore(response.data);
+        // Stats verisi store içinden alınacak
+        setStats({
+          totalOrders: response.data.totalOrders || 0,
+          activeProducts: response.data.activeProducts || 0,
+          totalFollowers: response.data.followers?.length || 0
+        });
+      }
+    } catch (error) {
+      console.error('Load store profile error:', error);
+      Alert.alert('Error', error.message || 'Failed to load store profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3d4785" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
-        <Image source={{ uri: 'https://static.vecteezy.com/system/resources/thumbnails/000/701/690/small/abstract-polygonal-banner-background.jpg' }} style={styles.storeBanner} />
+        <Image source={{ uri: store?.banner || 'https://via.placeholder.com/1200x300' }} style={styles.storeBanner} />
         <View style={styles.profileHeader}>
-          <Image source={{ uri: 'https://via.placeholder.com/150' }} style={styles.storeLogo} />
-          <Text style={styles.storeName}>متجر الأناقة الأوروبية</Text>
-          <Text style={styles.sellerInfo}>محمد العتيبي - الرياض، السعودية</Text>
-          <Text style={styles.storeCategory}>عطور وملابس</Text>
+          <Image source={{ uri: store?.logo || 'https://via.placeholder.com/150' }} style={styles.storeLogo} />
+          <Text style={styles.storeName}>{store?.name}</Text>
+          <Text style={styles.sellerInfo}>{store?.owner?.name} - {store?.location}</Text>
+          <Text style={styles.storeCategory}>{store?.category}</Text>
         </View>
+
         <View style={styles.statsContainer}>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>٣٢٥ طلب</Text>
-            <Text style={styles.statLabel}>إجمالي المبيعات</Text>
+            <Text style={styles.statValue}>{stats?.totalOrders || 0}</Text>
+            <Text style={styles.statLabel}>Total Orders</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>١٥٠ منتج</Text>
-            <Text style={styles.statLabel}>المنتجات النشطة</Text>
+            <Text style={styles.statValue}>{stats?.activeProducts || 0}</Text>
+            <Text style={styles.statLabel}>Active Products</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>٢١٠٠ متابع</Text>
-            <Text style={styles.statLabel}>المتابعين</Text>
+            <Text style={styles.statValue}>{stats?.totalFollowers || 0}</Text>
+            <Text style={styles.statLabel}>Followers</Text>
           </View>
         </View>
+
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>إدارة المنتجات</Text>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('EditStoreProfile', { store })}
+          >
+            <Text style={styles.actionButtonText}>Edit Profile</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>إضافة منتج جديد</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>العروض والخصومات</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.tabsContainer}>
-          <TouchableOpacity style={styles.tabButton}>
-            <Text style={styles.tabButtonText}>المنتجات</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tabButton}>
-            <Text style={styles.tabButtonText}>التقييمات</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tabButton}>
-            <Text style={styles.tabButtonText}>الطلبات</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.productsContainer}>
-          {/* Example product items */}
-          <View style={styles.productItem}>
-            <Image source={{ uri: 'https://via.placeholder.com/100' }} style={styles.productImage} />
-            <Text style={styles.productName}>منتج 1</Text>
-          </View>
-          <View style={styles.productItem}>
-            <Image source={{ uri: 'https://via.placeholder.com/100' }} style={styles.productImage} />
-            <Text style={styles.productName}>منتج 2</Text>
-          </View>
-          <View style={styles.productItem}>
-            <Image source={{ uri: 'https://via.placeholder.com/100' }} style={styles.productImage} />
-            <Text style={styles.productName}>منتج 3</Text>
-          </View>
-          <View style={styles.productItem}>
-            <Image source={{ uri: 'https://via.placeholder.com/100' }} style={styles.productImage} />
-            <Text style={styles.productName}>منتج 4</Text>
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -191,6 +201,11 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 16,
     color: '#333',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

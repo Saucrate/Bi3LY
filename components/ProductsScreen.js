@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Button } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Button, RefreshControl } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
+import { sellerService } from '../services/sellerService';
 
 const ProductsScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
   const {  productName, productImage, productPrice, productDescription } = route.params;
+  const [loading, setLoading] = useState(false);
 
   const [quantity, setQuantity] = useState(1);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleAddToCart = () => {
     console.log(`Added ${quantity} of ${productName} to cart.`);
@@ -19,8 +22,48 @@ const ProductsScreen = () => {
     setIsFavorite(!isFavorite);
   };
 
+  // Ürünleri yükleme fonksiyonu
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await sellerService.getStoreProducts();
+      if (response.success) {
+        setProducts(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading products:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (route.params?.refreshProducts) {
+        loadProducts();
+        // Parametreyi sıfırla
+        navigation.setParams({ refreshProducts: false });
+      }
+    }, [route.params?.refreshProducts])
+  );
+
+  // Component mount olduğunda ilk yükleme
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    loadProducts().finally(() => setRefreshing(false));
+  }, []);
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView 
+      contentContainerStyle={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       <View style={styles.card}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.goBackButton}>
           <AntDesign name="arrowleft" size={24} color="#3d4785" />

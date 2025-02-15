@@ -1,9 +1,37 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, FlatList, TouchableOpacity, TextInput, Linking } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Image,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  Linking,
+  ActivityIndicator,
+  Dimensions,
+  SafeAreaView,
+  Platform,
+  StatusBar,
+  Alert,
+  RefreshControl
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Modal from 'react-native-modal';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { AntDesign } from '@expo/vector-icons';
+import { homeService } from '../services/homeService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import CustomAlert from './CustomAlert';
+import { favoriteService } from '../services/favoriteService';
+import { cartService } from '../services/cartService';
+import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
+import { SharedElement } from 'react-navigation-shared-element';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const { width } = Dimensions.get('window');
 
 const HomeScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -12,673 +40,765 @@ const HomeScreen = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [favorites, setFavorites] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showAuthAlert, setShowAuthAlert] = useState(false);
+  const [authMessage, setAuthMessage] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [homeData, setHomeData] = useState({
+    categories: { main: [], sub: [] },
+    personalized: {
+      followedStores: [],
+      orderedProducts: [],
+      recentlyViewed: [],
+      recommended: [],
+      similarProducts: [],
+      trendingInInterests: [],
+      recommendedBrands: []
+    },
+    specialStores: [],
+    specialProducts: [],
+    discountedProducts: [],
+    mostSoldStores: [],
+    mostSoldProducts: [],
+    brands: []
+  });
 
-  // Sample data for categories, products, special stores, most sold products, most sold stores, and special products
-  const categories = [
-    { id: '1', name: 'مجموعات الملابس', image: 'https://i.postimg.cc/Xqmwr12c/clothing.webp' },
-    { id: '2', name: 'أحذية الربيع', image: 'https://i.postimg.cc/8CmBZH5N/shoes.webp' },
-    { id: '3', name: 'إكسسوارات', image: 'https://i.postimg.cc/MHv7KJYp/access.webp' },
-    { id: '4', name: 'أجهزة إلكترونية', image: 'https://hisense.fr/wp-content/uploads/2023/07/40A5K-EURO-1.jpg' },
-    { id: '5', name: 'أثاث', image: 'https://khamsat.hsoubcdn.com/images/services/4097828/d95a4bc7851d91a88e4616c5d86bde40.jpg' },
-  ];
+  // Kişiselleştirilmiş veriler için state'ler
+  const [favoriteCategories, setFavoriteCategories] = useState([]);
 
-  const products = [
-    {
-      id: '1',
-      name: "دفتر HP",
-      category: "أجهزة الكمبيوتر المحمولة",
-      oldPrice: '1099 MRU',
-      price: '999 MRU',
-      available: 6,
-      rating: 5,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/4.webp",
-    },
-    {
-      id: '2',
-      name: "HP Envy",
-      category: "أجهزة الكمبيوتر المحمولة",
-      oldPrice: '1199 MRU',
-      price: '1099 MRU',
-      available: 7,
-      rating: 4,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/7.webp",
-    },
-    {
-      id: '3',
-      name: "توشيبا B77",
-      category: "أجهزة الكمبيوتر المحمولة",
-      oldPrice: '1399 MRU',
-      price: '1299 MRU',
-      available: 5,
-      rating: 4.5,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/5.webp",
-    },
-    {
-      id: '4',
-      name: "ماك بوك برو",
-      category: "أجهزة الكمبيوتر المحمولة",
-      oldPrice: '1599 MRU',
-      price: '1499 MRU',
-      available: 4,
-      rating: 4.8,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/15.webp",
-    },
-    {
-      id: '5',
-      name: "ديل انسبايرون",
-      category: "أجهزة الكمبيوتر المحمولة",
-      oldPrice: '1299 MRU',
-      price: '1199 MRU',
-      available: 3,
-      rating: 4.6,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/16.webp",
-    },
-    {
-      id: '6',
-      name: "لينوفو ثينك باد",
-      category: "أجهزة الكمبيوتر المحمولة",
-      oldPrice: '1399 MRU',
-      price: '1299 MRU',
-      available: 5,
-      rating: 4.7,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/17.webp",
-    },
-  ];
+  // Kategori state'leri
+  const [mainCategories, setMainCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+  const [viewedCategories, setViewedCategories] = useState([]);
 
-  const specialStores = [
-    { id: '1', name: 'متجر الإلكترونيات', type: 'إلكترونيات', rating: 4.5, followers: 1200, image: 'https://i.postimg.cc/3x3QzSGq/electronics-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/electronics-logo.jpg' },
-    { id: '2', name: 'متجر الأزياء', type: 'أزياء', rating: 4.7, followers: 1500, image: 'https://i.postimg.cc/3x3QzSGq/fashion-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/fashion-logo.jpg' },
-    { id: '3', name: 'متجر الأدوات المنزلية', type: 'أدوات منزلية', rating: 4.3, followers: 900, image: 'https://i.postimg.cc/3x3QzSGq/home-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/home-logo.jpg' },
-    { id: '4', name: 'متجر الألعاب', type: 'ألعاب', rating: 4.8, followers: 1100, image: 'https://i.postimg.cc/3x3QzSGq/games-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/games-logo.jpg' },
-    { id: '5', name: 'متجر الكتب', type: 'كتب', rating: 4.6, followers: 800, image: 'https://i.postimg.cc/3x3QzSGq/books-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/books-logo.jpg' },
-    { id: '6', name: 'متجر الأجهزة الرياضية', type: 'رياضة', rating: 4.4, followers: 1000, image: 'https://i.postimg.cc/3x3QzSGq/sports-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/sports-logo.jpg' },
-  ];
+  const [followedStores, setFollowedStores] = useState([]);
+  const [orderedProducts, setOrderedProducts] = useState([]);
+  const [cartItems, setCartItems] = useState({});
+  const [favoriteItems, setFavoriteItems] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
 
-  const mostSoldProducts = [
-    {
-      id: '4',
-      name: "هاتف سامسونج",
-      category: "هواتف ذكية",
-      price: '799 MRU',
-      rating: 4.8,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/6.webp",
-    },
-    {
-      id: '5',
-      name: "سماعات آبل",
-      category: "إكسسوارات",
-      price: '299 MRU',
-      rating: 4.9,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/8.webp",
-    },
-    {
-      id: '6',
-      name: "كاميرا كانون",
-      category: "كاميرات",
-      price: '999 MRU',
-      rating: 4.7,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/18.webp",
-    },
-    {
-      id: '7',
-      name: "ساعة ذكية",
-      category: "أجهزة رصد",
-      price: '499 MRU',
-      rating: 4.5,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/13.webp",
-    },
-    {
-      id: '8',
-      name: "لابتوب ألعاب",
-      category: "أجهزة الكمبيوتر المحمولة",
-      price: '1599 MRU',
-      rating: 4.8,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/14.webp",
-    },
-  ];
-
-  const mostSoldStores = [
-    { id: '4', name: 'متجر الهواتف', type: 'هواتف', rating: 4.9, followers: 2000, image: 'https://i.postimg.cc/3x3QzSGq/mobile-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/mobile-logo.jpg' },
-    { id: '5', name: 'متجر الإكسسوارات', type: 'إكسسوارات', rating: 4.8, followers: 1800, image: 'https://i.postimg.cc/3x3QzSGq/accessories-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/accessories-logo.jpg' },
-    { id: '6', name: 'متجر الكاميرات', type: 'كاميرات', rating: 4.7, followers: 1500, image: 'https://i.postimg.cc/3x3QzSGq/camera-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/camera-logo.jpg' },
-    { id: '7', name: 'متجر الساعات', type: 'ساعات', rating: 4.6, followers: 1400, image: 'https://i.postimg.cc/3x3QzSGq/watch-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/watch-logo.jpg' },
-    { id: '8', name: 'متجر الألعاب', type: 'ألعاب', rating: 4.5, followers: 1300, image: 'https://i.postimg.cc/3x3QzSGq/games-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/games-logo.jpg' },
-  ];
-
-  const specialProducts = [
-    {
-      id: '1',
-      name: "لابتوب خاص",
-      category: "أجهزة الكمبيوتر المحمولة",
-      price: '1499 MRU',
-      rating: 4.9,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/9.webp",
-    },
-    {
-      id: '2',
-      name: "سماعات خاصة",
-      category: "إكسسوارات",
-      price: '399 MRU',
-      rating: 4.7,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/10.webp",
-    },
-    {
-      id: '3',
-      name: "هاتف خاص",
-      category: "هواتف ذكية",
-      price: '999 MRU',
-      rating: 4.8,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/19.webp",
-    },
-    {
-      id: '4',
-      name: "كاميرا خاصة",
-      category: "كاميرات",
-      price: '1199 MRU',
-      rating: 4.6,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/20.webp",
-    },
-    {
-      id: '5',
-      name: "ساعة خاصة",
-      category: "أجهزة رصد",
-      price: '499 MRU',
-      rating: 4.5,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/21.webp",
-    },
-  ];
-
-  const remiseProducts = [
-    {
-      id: '1',
-      name: "لابتوب مخفض السعر",
-      category: "أجهزة الكمبيوتر المحمولة",
-      price: '899 MRU',
-      rating: 4.7,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/11.webp",
-    },
-    {
-      id: '2',
-      name: "سماعات مخفضة السعر",
-      category: "إكسسوارات",
-      price: '199 MRU',
-      rating: 4.6,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/12.webp",
-    },
-    {
-      id: '3',
-      name: "هاتف مخفض السعر",
-      category: "هواتف ذكية",
-      price: '699 MRU',
-      rating: 4.5,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/8.webp",
-    },
-    {
-      id: '4',
-      name: "كاميرا مخفضة السعر",
-      category: "كاميرات",
-      price: '899 MRU',
-      rating: 4.4,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/15.webp",
-    },
-    {
-      id: '5',
-      name: "ساعة مخفضة السعر",
-      category: "أجهزة رصد",
-      price: '299 MRU',
-      rating: 4.3,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/20.webp",
-    },
-  ];
-
-  const brands = [
-    { id: '1', name: 'Nike', logo: 'https://i.postimg.cc/3x3QzSGq/nike-logo.jpg' },
-    { id: '2', name: 'Adidas', logo: 'https://i.postimg.cc/3x3QzSGq/adidas-logo.jpg' },
-    { id: '3', name: 'Apple', logo: 'https://i.postimg.cc/3x3QzSGq/apple-logo.jpg' },
-    { id: '4', name: 'Samsung', logo: 'https://i.postimg.cc/3x3QzSGq/samsung-logo.jpg' },
-    { id: '5', name: 'Sony', logo: 'https://i.postimg.cc/3x3QzSGq/sony-logo.jpg' },
-  ];
-
-  const subcategories = [
-    { id: '1', name: 'ملابس رجالية', image: 'https://i.postimg.cc/3x3QzSGq/mens-clothing.jpg' },
-    { id: '2', name: 'ملابس نسائية', image: 'https://i.postimg.cc/3x3QzSGq/womens-clothing.jpg' },
-    { id: '3', name: 'أحذية رياضية', image: 'https://i.postimg.cc/3x3QzSGq/sports-shoes.jpg' },
-    { id: '4', name: 'حقائب', image: 'https://i.postimg.cc/3x3QzSGq/bags.jpg' },
-    { id: '5', name: 'ساعات', image: 'https://i.postimg.cc/3x3QzSGq/watches.jpg' },
-  ];
-
-  const toggleFavorite = (productId) => {
-    setFavorites((prevFavorites) => ({
-      ...prevFavorites,
-      [productId]: !prevFavorites[productId],
-    }));
+  const loadHomeData = async () => {
+    try {
+      console.log('=== Loading Home Screen Data ===');
+      setLoading(true);
+      
+      const response = await homeService.getHomeData();
+      console.log('Home Data Response:', {
+        success: response.success,
+        categories: {
+          main: response.data?.categories?.main?.length || 0,
+          sub: response.data?.categories?.sub?.length || 0
+        },
+        personalized: {
+          followedStores: response.data?.personalized?.followedStores?.length || 0,
+          orderedProducts: response.data?.personalized?.orderedProducts?.length || 0
+        }
+      });
+      
+      if (response.success) {
+        setHomeData(response.data);
+        setMainCategories(response.data.categories?.main || []);
+        setSubCategories(response.data.categories?.sub || []);
+        console.log('Data successfully set to state');
+      }
+    } catch (error) {
+      console.error('Error loading home data:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+      console.log('=== End Loading Home Screen Data ===');
+    }
   };
 
-  const renderCategoryItem = ({ item }) => (
-    <TouchableOpacity
+  useEffect(() => {
+    loadHomeData();
+    const unsubscribe = navigation.addListener('focus', loadHomeData);
+    return unsubscribe;
+  }, [navigation]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadHomeData();
+  };
+
+  const renderPersonalizedSection = () => {
+    const hasPersonalizedData = homeData.personalized?.followedStores?.length > 0 || 
+                               homeData.personalized?.orderedProducts?.length > 0;
+
+    if (!hasPersonalizedData) return null;
+
+    return (
+      <Animated.View 
+        entering={FadeInDown.delay(300)}
+        style={styles.personalizedSection}
+      >
+        <BlurView intensity={50} style={styles.blurContainer}>
+          <Text style={styles.sectionTitle}>نشاطك</Text>
+          
+          {/* Followed Stores */}
+          {homeData.personalized?.followedStores?.length > 0 && (
+            <>
+              <Text style={styles.subsectionTitle}>المتاجر المتابعة</Text>
+              <Animated.ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.horizontalScroll}
+              >
+                {homeData.personalized.followedStores.map((store, index) => (
+                  <Animated.View 
+                    key={store._id}
+                    entering={FadeInRight.delay(index * 100)}
+                  >
+                    <TouchableOpacity 
+                      style={styles.storeCard}
+                      onPress={() => navigation.navigate('Store', { storeId: store._id })}
+                    >
+                      <SharedElement id={`store.${store._id}.image`}>
+                        <Image source={{ uri: store.logo }} style={styles.storeLogo} />
+                      </SharedElement>
+                      <Text style={styles.storeName}>{store.name}</Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
+              </Animated.ScrollView>
+            </>
+          )}
+
+          {/* Recent Orders */}
+          {homeData.personalized?.orderedProducts?.length > 0 && (
+            <>
+              <Text style={styles.subsectionTitle}>الطلبات الأخيرة</Text>
+              <Animated.ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.horizontalScroll}
+              >
+                {homeData.personalized.orderedProducts.map((product, index) => (
+                  <Animated.View 
+                    key={product._id}
+                    entering={FadeInRight.delay(index * 100)}
+                  >
+                    <TouchableOpacity 
+                      style={styles.productCard}
+                      onPress={() => navigation.navigate('ProductDetail', { productId: product._id })}
+                    >
+                      <SharedElement id={`product.${product._id}.image`}>
+                        <Image source={{ uri: product.images[0] }} style={styles.productImage} />
+                      </SharedElement>
+                      <View style={styles.productInfo}>
+                        <Text style={styles.productName}>{product.name}</Text>
+                        <Text style={styles.productPrice}>{product.price} MRU</Text>
+                      </View>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
+              </Animated.ScrollView>
+            </>
+          )}
+        </BlurView>
+      </Animated.View>
+    );
+  };
+
+  const checkAuth = async () => {
+    const token = await AsyncStorage.getItem('token');
+    return !!token;
+  };
+
+  const handleAuthRequired = (action) => {
+    setAuthMessage(
+      action === 'favorite' 
+        ? 'يجب عليك تسجيل الدخول لإضافة المنتج إلى المفضلة'
+        : 'يجب عليك تسجيل الدخول لإضافة المنتج إلى السلة'
+    );
+    setShowAuthAlert(true);
+  };
+
+  const handleLogin = () => {
+    setShowAuthAlert(false);
+    navigation.navigate('Auth');
+  };
+
+  const toggleFavorite = async (productId) => {
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+      handleAuthRequired('favorite');
+      return;
+    }
+
+    try {
+      console.log('Toggling favorite for product:', productId);
+      const response = await favoriteService.toggleFavorite(productId);
+      console.log('Toggle favorite response:', response);
+      
+      if (response.success) {
+        setFavorites((prevFavorites) => ({
+          ...prevFavorites,
+          [productId]: !prevFavorites[productId],
+        }));
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    }
+  };
+
+  const handleAddToCart = async (product) => {
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+      handleAuthRequired('cart');
+      return;
+    }
+
+    try {
+      console.log('Adding to cart:', product._id);
+      const response = await cartService.addToCart(product._id, 1);
+      console.log('Add to cart response:', response);
+      
+      if (response.success) {
+        // Başarılı ekleme bildirimi göster
+        Alert.alert('نجاح', 'تمت إضافة المنتج إلى السلة بنجاح');
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+    }
+  };
+
+  const handleProductPress = (product) => {
+    trackActivity('product', product._id);
+    navigation.navigate('ProductDetailScreen', { 
+      productId: product._id,
+      product: product 
+    });
+  };
+
+  const handleStorePress = (store) => {
+    trackActivity('store', store._id);
+    navigation.navigate('Store', { 
+      storeId: store._id,
+      store: store 
+    });
+  };
+
+  const handleBrandPress = (brand) => {
+    trackActivity('brand', brand._id);
+    navigation.navigate('BrandProducts', { 
+      brandId: brand._id,
+      brand: brand 
+    });
+  };
+
+  const handleCategoryPress = (category) => {
+    trackActivity('category', category._id);
+    navigation.navigate('CategoryProducts', { 
+      categoryId: category._id,
+      category: category 
+    });
+  };
+
+  const renderCategoryItem = ({ item, index }) => (
+    <TouchableOpacity 
+      key={`category-${item._id}`}
       style={styles.categoryItem}
-      onPress={() => navigation.navigate('CategoryProducts', { categoryId: item.id, categoryName: item.name })}
+      onPress={() => handleCategoryPress(item)}
     >
-      <View style={styles.categoryImageContainer}>
-        <Image source={{ uri: item.image }} style={styles.categoryImage} />
-      </View>
-      <Text style={styles.categoryText}>{item.name}</Text>
+      <Image 
+        source={{ uri: item.image }} 
+        style={styles.categoryImage}
+        defaultSource={require('../assets/placeholder.jpeg')}
+      />
+      <Text style={styles.categoryName}>{item.name}</Text>
     </TouchableOpacity>
   );
 
-  const renderProduct = ({ item }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => navigation.navigate('ProductDetailScreen', { productId: item.id, productName: item.name })}
-    >
-      <Image source={{ uri: item.image }} style={styles.productImage} />
-      <View style={styles.cardContent}>
-        <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.priceText}>{item.price}</Text>
-        <View style={styles.ratingContainer}>
-          {Array.from({ length: 5 }, (_, index) => (
-            <AntDesign
-              key={index}
-              name={index < Math.floor(item.rating) ? "star" : "staro"}
-              size={12}
-              color="#FFD700"
-            />
-          ))}
-          {item.rating % 1 !== 0 && <AntDesign name="starhalf" size={12} color="#FFD700" />}
-        </View>
-        <TouchableOpacity onPress={() => toggleFavorite(item.id)}>
-          <AntDesign
-            name={favorites[item.id] ? "heart" : "hearto"}
-            size={16}
-            color={favorites[item.id] ? "#FF0000" : "#333"}
-          />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const renderStore = ({ item }) => (
-    <TouchableOpacity
+  const renderStoreItem = ({ item, index }) => (
+    <TouchableOpacity 
+      key={`store-${item._id}`}
       style={styles.storeCard}
-      onPress={() => navigation.navigate('StoreDetails', { storeId: item.id, storeName: item.name })}
+      onPress={() => handleStorePress(item)}
     >
-      <Image source={{ uri: item.image }} style={styles.storeImage} />
+      <Image 
+        source={{ uri: item.banner || item.logo }} 
+        style={styles.storeImage}
+        defaultSource={require('../assets/placeholder.jpeg')}
+      />
       <View style={styles.storeInfo}>
         <Text style={styles.storeName}>{item.name}</Text>
-        <Text style={styles.storeType}>{item.type}</Text>
-        <View style={styles.storeRating}>
-          <AntDesign name="star" size={12} color="#FFD700" />
-          <Text style={styles.storeRatingText}>{item.rating}</Text>
-        </View>
-        <Text style={styles.storeFollowers}>{item.followers} Followers</Text>
-      </View>
-      <Image source={{ uri: item.logo }} style={styles.storeLogo} />
-    </TouchableOpacity>
-  );
-
-  const renderRemiseProduct = ({ item }) => (
-    <TouchableOpacity
-      style={styles.remiseCard}
-      onPress={() => navigation.navigate('ProductDetailScreen', { productId: item.id, productName: item.name })}
-    >
-      <Image source={{ uri: item.image }} style={styles.productImage} />
-      <View style={styles.remiseIconContainer}>
-        <AntDesign name="tag" size={16} color="#FFD700" />
-      </View>
-      <View style={styles.cardContent}>
-        <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.priceText}>{item.price}</Text>
         <View style={styles.ratingContainer}>
-          {Array.from({ length: 5 }, (_, index) => (
-            <AntDesign
-              key={index}
-              name={index < Math.floor(item.rating) ? "star" : "staro"}
-              size={12}
-              color="#FFD700"
-            />
-          ))}
-          {item.rating % 1 !== 0 && <AntDesign name="starhalf" size={12} color="#FFD700" />}
+          {renderStars(item.rating)}
+          <Text style={styles.ratingText}>({item.rating?.toFixed(1) || '0.0'})</Text>
         </View>
-        <TouchableOpacity onPress={() => toggleFavorite(item.id)}>
-          <AntDesign
-            name={favorites[item.id] ? "heart" : "hearto"}
-            size={16}
-            color={favorites[item.id] ? "#FF0000" : "#333"}
-          />
-        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 
-  const renderBrandItem = ({ item }) => (
+  const renderProductItem = ({ item, index }) => (
     <TouchableOpacity
-      style={styles.brandItem}
-      onPress={() => navigation.navigate('BrandProducts', { brandId: item.id, brandName: item.name })}
+      style={styles.productCard}
+      onPress={() => handleProductPress(item)}
     >
-      <Image source={{ uri: item.logo }} style={styles.brandLogo} />
-      <Text style={styles.brandName}>{item.name}</Text>
+      <SharedElement id={`product.${item._id}.image`}>
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: item.images[0] }}
+            style={styles.productImage}
+            defaultSource={require('../assets/placeholder.jpeg')}
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.3)']}
+            style={styles.gradient}
+          />
+          <BlurView intensity={80} style={styles.priceTag}>
+            <Text style={styles.priceText}>
+              {item.discountPrice ? item.discountPrice : item.price} أوقية
+            </Text>
+          </BlurView>
+        </View>
+      </SharedElement>
+      <View style={styles.productInfo}>
+        <Text style={styles.productName} numberOfLines={2}>
+          {item.name}
+        </Text>
+        <View style={styles.ratingContainer}>
+          {renderStars(item.rating)}
+          <Text style={styles.reviewCount}>({item.numReviews})</Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={styles.favoriteButton}
+        onPress={() => toggleFavorite(item._id)}
+      >
+        <BlurView intensity={80} style={styles.iconBackground}>
+          <AntDesign
+            name={item.isFavorite ? "heart" : "hearto"}
+            size={20}
+            color={item.isFavorite ? "#ff4444" : "#666"}
+          />
+        </BlurView>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.cartButton}
+        onPress={() => handleAddToCart(item)}
+      >
+        <BlurView intensity={80} style={styles.iconBackground}>
+          <Ionicons name="cart-outline" size={20} color="#666" />
+        </BlurView>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 
-  const renderBrandGridItem = ({ item }) => (
-    <View style={styles.brandGridItem}>
-      <Image source={{ uri: item.logo }} style={styles.brandGridLogo} />
-      <Text style={styles.brandGridName}>{item.name}</Text>
-    </View>
-  );
-
-  const handleAddToCart = () => {
-    // Add to cart logic
-    // Do not close the modal
+  const renderRemiseProduct = ({ item }) => {
+    const discount = calculateDiscount(item.price, item.discountPrice);
+    return (
+      <TouchableOpacity 
+        style={[styles.remiseCard, { transform: [{ scaleX: -1 }] }]}
+        onPress={() => {
+          trackActivity('product', item._id);
+          navigation.navigate('ProductDetailScreen', { 
+            productId: item._id,
+            product: item 
+          });
+        }}
+      >
+        <FlatList
+          data={item.images || []}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(_, index) => index.toString()}
+          ListEmptyComponent={() => (
+            <Image
+              source={{ uri: 'https://via.placeholder.com/150' }}
+              style={styles.remiseProductImage}
+              defaultSource={require('../assets/placeholder.jpeg')}
+            />
+          )}
+          renderItem={({ item: imageUrl }) => (
+            <Image
+              source={{ uri: imageUrl }}
+              style={styles.remiseProductImage}
+              defaultSource={require('../assets/placeholder.jpeg')}
+            />
+          )}
+        />
+        <View style={styles.remiseCardContent}>
+          <Text style={styles.remiseProductName} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <View style={styles.ratingContainer}>
+            {renderStars(item.rating)}
+            <Text style={styles.ratingText}>({item.numReviews})</Text>
+          </View>
+          <View style={styles.priceContainer}>
+            <Text style={styles.discountPrice}>
+              {item.discountPrice} MRU
+            </Text>
+            <Text style={styles.originalPrice}>
+              {item.price} MRU
+            </Text>
+            <View style={styles.discountBadge}>
+              <Text style={styles.discountText}>-{discount}%</Text>
+            </View>
+          </View>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity 
+              style={styles.favoriteButton}
+              onPress={() => toggleFavorite(item._id)}
+            >
+              <AntDesign 
+                name={favorites[item._id] ? "heart" : "hearto"} 
+                size={20} 
+                color={favorites[item._id] ? "#FF6B6B" : "#666"}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.cartButton}
+              onPress={() => handleAddToCart(item)}
+            >
+              <Icon name="cart-outline" size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.includes(searchQuery) || product.category.includes(searchQuery)
+  const renderBrandGridItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.brandGridItem}
+      onPress={() => handleBrandPress(item)}
+    >
+      <Image 
+        source={{ uri: item.logo }} 
+        style={styles.brandGridLogo} 
+        defaultSource={require('../assets/placeholder.jpeg')}
+      />
+      <Text style={styles.brandGridName}>{item.name}</Text>
+    </TouchableOpacity>
   );
 
-  const renderFavoriteProduct = ({ item }) => (
-    <TouchableOpacity
-      style={styles.favoriteCard}
-      onPress={() => navigation.navigate('ProductDetailScreen', { productId: item.id, productName: item.name })}
-    >
-      <Image source={{ uri: item.image }} style={styles.productImage} />
-      <View style={styles.favoriteIconContainer}>
-        <AntDesign name="heart" size={16} color="#FF69B4" />
-      </View>
-      <View style={styles.cardContent}>
-        <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.priceText}>{item.price}</Text>
-        <View style={styles.ratingContainer}>
-          {Array.from({ length: 5 }, (_, index) => (
-            <AntDesign
-              key={index}
-              name={index < Math.floor(item.rating) ? "star" : "staro"}
-              size={12}
-              color="#FFD700"
-            />
-          ))}
-          {item.rating % 1 !== 0 && <AntDesign name="starhalf" size={12} color="#FFD700" />}
+  const calculateDiscount = (originalPrice, discountPrice) => {
+    const original = parseFloat(originalPrice);
+    const discounted = parseFloat(discountPrice);
+    if (isNaN(original) || isNaN(discounted) || original === 0) return 0;
+    return Math.round(((original - discounted) / original) * 100);
+  };
+
+  const renderStars = (rating) => {
+    const stars = [];
+    for (let i = 1; i <= 5; i++) {
+      stars.push(
+        <AntDesign
+          key={i}
+          name={i <= rating ? "star" : "staro"}
+          size={12}
+          color="#FFD700"
+        />
+      );
+    }
+    return stars;
+  };
+
+  // Aktivite takibi
+  const trackActivity = async (type, itemId) => {
+    try {
+      // Geçerli aktivite tiplerini kontrol et
+      const validTypes = ['view_product', 'view_category', 'view_brand', 'search', 'add_to_cart', 'purchase'];
+      const typeMapping = {
+        'product': 'view_product',
+        'category': 'view_category',
+        'brand': 'view_brand',
+        'search': 'search',
+        'cart': 'add_to_cart'
+      };
+
+      const mappedType = typeMapping[type] || type;
+      
+      if (!validTypes.includes(mappedType)) {
+        console.warn('Invalid activity type:', type);
+        return;
+      }
+
+      await homeService.trackActivity(mappedType, itemId);
+    } catch (error) {
+      console.error('Activity tracking error:', error);
+    }
+  };
+
+  if (loading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3d4785" />
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </SafeAreaView>
+    );
+  }
 
-  const renderSuggestedProduct = ({ item }) => (
-    <TouchableOpacity
-      style={styles.suggestedCard}
-      onPress={() => navigation.navigate('ProductDetailScreen', { productId: item.id, productName: item.name })}
-    >
-      <Image source={{ uri: item.image }} style={styles.productImage} />
-      <View style={styles.suggestedIconContainer}>
-        <AntDesign name="bulb1" size={16} color="#FFA500" />
-      </View>
-      <View style={styles.cardContent}>
-        <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.priceText}>{item.price}</Text>
-        <View style={styles.ratingContainer}>
-          {Array.from({ length: 5 }, (_, index) => (
-            <AntDesign
-              key={index}
-              name={index < Math.floor(item.rating) ? "star" : "staro"}
-              size={12}
-              color="#FFD700"
-            />
-          ))}
-          {item.rating % 1 !== 0 && <AntDesign name="starhalf" size={12} color="#FFD700" />}
+  if (error) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadHomeData}>
+            <Text style={styles.retryButtonText}>إعادة المحاولة</Text>
+          </TouchableOpacity>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const followedStores = [
-    { id: '1', name: 'متجر الأجهزة الإلكترونية', type: 'إلكترونيات', rating: 4.6, followers: 1300, image: 'https://i.postimg.cc/3x3QzSGq/gadget-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/gadget-logo.jpg' },
-    { id: '2', name: 'متجر الأزياء', type: 'أزياء', rating: 4.7, followers: 1500, image: 'https://i.postimg.cc/3x3QzSGq/fashion-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/fashion-logo.jpg' },
-    { id: '3', name: 'متجر الأدوات المنزلية', type: 'أدوات منزلية', rating: 4.3, followers: 900, image: 'https://i.postimg.cc/3x3QzSGq/home-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/home-logo.jpg' },
-    { id: '4', name: 'متجر الألعاب', type: 'ألعاب', rating: 4.8, followers: 1100, image: 'https://i.postimg.cc/3x3QzSGq/games-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/games-logo.jpg' },
-    { id: '5', name: 'متجر الكتب', type: 'كتب', rating: 4.6, followers: 800, image: 'https://i.postimg.cc/3x3QzSGq/books-store.jpg', logo: 'https://i.postimg.cc/3x3QzSGq/books-logo.jpg' },
-  ];
-
-  const suggestedProducts = [
-    {
-      id: '1',
-      name: "ساعة ذكية",
-      category: "أجهزة رصد",
-      price: '499 MRU',
-      rating: 4.5,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/13.webp",
-    },
-    {
-      id: '2',
-      name: "لابتوب ألعاب",
-      category: "أجهزة الكمبيوتر المحمولة",
-      price: '1599 MRU',
-      rating: 4.8,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/14.webp",
-    },
-    {
-      id: '3',
-      name: "هاتف سامسونج",
-      category: "هواتف ذكية",
-      price: '799 MRU',
-      rating: 4.8,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/6.webp",
-    },
-    {
-      id: '4',
-      name: "سماعات آبل",
-      category: "إكسسوارات",
-      price: '299 MRU',
-      rating: 4.9,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/8.webp",
-    },
-    {
-      id: '5',
-      name: "كاميرا كانون",
-      category: "كاميرات",
-      price: '999 MRU',
-      rating: 4.7,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/18.webp",
-    },
-  ];
-
-  const followedProducts = [
-    {
-      id: '1',
-      name: "لابتوب ألعاب",
-      category: "أجهزة الكمبيوتر المحمولة",
-      price: '1599 MRU',
-      rating: 4.8,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/14.webp",
-    },
-    {
-      id: '2',
-      name: "هاتف سامسونج",
-      category: "هواتف ذكية",
-      price: '799 MRU',
-      rating: 4.8,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/6.webp",
-    },
-    {
-      id: '3',
-      name: "سماعات آبل",
-      category: "إكسسوارات",
-      price: '299 MRU',
-      rating: 4.9,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/8.webp",
-    },
-    {
-      id: '4',
-      name: "كاميرا كانون",
-      category: "كاميرات",
-      price: '999 MRU',
-      rating: 4.7,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/18.webp",
-    },
-    {
-      id: '5',
-      name: "ساعة ذكية",
-      category: "أجهزة رصد",
-      price: '499 MRU',
-      rating: 4.5,
-      image: "https://mdbcdn.b-cdn.net/img/Photos/Horizontal/E-commerce/Products/13.webp",
-    },
-  ];
-
-  const renderSubcategoryItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.subcategoryItem}
-      onPress={() => navigation.navigate('SubcategoryProducts', { subcategoryId: item.id, subcategoryName: item.name })}
-    >
-      <View style={styles.subcategoryImageContainer}>
-        <Image source={{ uri: item.image }} style={styles.subcategoryImage} />
-      </View>
-      <Text style={styles.subcategoryText}>{item.name}</Text>
-    </TouchableOpacity>
-  );
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <TouchableOpacity style={styles.bannerContainer} onPress={() => Linking.openURL('#sellers')}>
-        <Image source={{ uri: 'https://i.postimg.cc/t403yfn9/home2.jpg' }} style={styles.bannerImage} />
-      </TouchableOpacity>
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search for products or categories"
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-      />
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>الفئات</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="البحث عن المنتجات"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
       </View>
       <FlatList
-        data={categories}
-        renderItem={renderCategoryItem}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoryList}
+        data={[{ key: 'main' }]}
+        keyExtractor={(item, index) => `main-content-${index}`}
+        renderItem={() => (
+          <>
+            {/* Personalized Section */}
+            {renderPersonalizedSection()}
+
+            <TouchableOpacity style={styles.bannerContainer} onPress={() => Linking.openURL('#sellers')}>
+              <Image source={{ uri: 'https://i.postimg.cc/t403yfn9/home2.jpg' }} style={styles.bannerImage} />
+            </TouchableOpacity>
+
+            {/* Main Categories */}
+            <View style={styles.mainCategoriesContainer}>
+              <Text style={styles.sectionTitle}>التصنيفات الرئيسية</Text>
+              <View style={styles.mainCategoriesGrid}>
+                {mainCategories.map((category) => (
+                  <TouchableOpacity
+                    key={`main-category-${category._id}`}
+                    style={styles.mainCategoryItem}
+                    onPress={() => handleCategoryPress(category)}
+                  >
+                    <View style={styles.mainCategoryImageContainer}>
+                      <Image
+                        source={{ uri: category.image }}
+                        style={styles.mainCategoryImage}
+                        defaultSource={require('../assets/placeholder.jpeg')}
+                      />
+                    </View>
+                    <Text style={styles.mainCategoryName}>{category.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Special Stores */}
+            {homeData.specialStores.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>المتاجر المميزة</Text>
+                </View>
+                <View style={styles.storeList}>
+                  {homeData.specialStores.map((store) => (
+                    <View key={`store-${store._id}`}>
+                      {renderStoreItem({ item: store })}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Sub Categories */}
+            <View style={styles.subCategoriesContainer}>
+              <Text style={styles.sectionTitle}>التصنيفات الفرعية</Text>
+              <View style={styles.subCategoriesGrid}>
+                {subCategories.map((category) => (
+                  <TouchableOpacity
+                    key={`sub-category-${category._id}`}
+                    style={styles.subCategoryItem}
+                    onPress={() => handleCategoryPress(category)}
+                  >
+                    <Image
+                      source={{ uri: category.image }}
+                      style={styles.subCategoryImage}
+                      defaultSource={require('../assets/placeholder.jpeg')}
+                    />
+                    <Text style={styles.subCategoryName}>{category.name}</Text>
+                    <Text style={styles.parentCategoryName}>{category.parent?.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Recently Viewed Products */}
+            {homeData.personalized.recentlyViewed.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>المنتجات المشاهدة مؤخراً</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
+                  {homeData.personalized.recentlyViewed.map((product) => (
+                    <View key={`recent-${product._id}`}>
+                      {renderProductItem({ item: product })}
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Recommended Products */}
+            {homeData.personalized.recommended?.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>منتجات موصى بها لك</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
+                  {homeData.personalized.recommended.map((product) => (
+                    <View key={`recommended-${product._id}`}>
+                      {renderProductItem({ item: product })}
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Trending Products */}
+            {homeData.personalized.trendingInInterests.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>المنتجات الرائجة في مجال اهتمامك</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
+                  {homeData.personalized.trendingInInterests.map((product) => (
+                    <View key={`trending-${product._id}`}>
+                      {renderProductItem({ item: product })}
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Special Products */}
+            {homeData.specialProducts.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>منتجات مميزة</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
+                  {homeData.specialProducts.map((product) => (
+                    <View key={`special-${product._id}`}>
+                      {renderProductItem({ item: product })}
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Discounted Products */}
+            {homeData.discountedProducts.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>منتجات مخفضة</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
+                  {homeData.discountedProducts.map((product) => (
+                    <View key={`discount-${product._id}`}>
+                      {renderRemiseProduct({ item: product })}
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Similar Products */}
+            {homeData.personalized.similarProducts.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>منتجات مشابهة</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
+                  {homeData.personalized.similarProducts.map((product) => (
+                    <View key={`similar-${product._id}`}>
+                      {renderProductItem({ item: product })}
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Most Sold Stores */}
+            {homeData.mostSoldStores.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>المتاجر الأكثر مبيعاً</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storeList}>
+                  {homeData.mostSoldStores.map((store) => (
+                    <View key={`store-${store._id}`}>
+                      {renderStoreItem({ item: store })}
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Most Sold Products */}
+            {homeData.mostSoldProducts.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>المنتجات الأكثر مبيعاً</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
+                  {homeData.mostSoldProducts.map((product) => (
+                    <View key={`most-sold-${product._id}`}>
+                      {renderProductItem({ item: product })}
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Recommended Brands */}
+            {homeData.personalized.recommendedBrands.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>العلامات التجارية الموصى بها</Text>
+                </View>
+                <View style={styles.brandGrid}>
+                  {homeData.personalized.recommendedBrands.map((brand) => (
+                    <View key={`brand-${brand._id}`}>
+                      {renderBrandGridItem({ item: brand })}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* All Brands */}
+            {homeData.brands.length > 0 && (
+              <View>
+                <View style={styles.titleContainer}>
+                  <Text style={styles.sectionTitle}>جميع العلامات التجارية</Text>
+                </View>
+                <View style={styles.brandGrid}>
+                  {homeData.brands.map((brand) => (
+                    <View key={`brand-${brand._id}`}>
+                      {renderBrandGridItem({ item: brand })}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </>
+        )}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
       />
 
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>المتاجر المميزة</Text>
-      </View>
-      <FlatList
-        data={specialStores}
-        renderItem={renderStore}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.storeList}
-      />
-
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>المنتجات الخاصة</Text>
-      </View>
-      <FlatList
-        data={specialProducts}
-        renderItem={renderProduct}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.productList}
-      />
-
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>منتجات التخفيض</Text>
-      </View>
-      <FlatList
-        data={remiseProducts}
-        renderItem={renderRemiseProduct}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.productList}
-      />
-
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>المتاجر الأكثر مبيعًا</Text>
-      </View>
-      <FlatList
-        data={mostSoldStores}
-        renderItem={renderStore}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.storeList}
-      />
-
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>المنتجات الأكثر مبيعًا</Text>
-      </View>
-      <FlatList
-        data={mostSoldProducts}
-        renderItem={renderProduct}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.productList}
-      />
-
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>الفئات الفرعية</Text>
-      </View>
-      <FlatList
-        data={subcategories}
-        renderItem={renderSubcategoryItem}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.subcategoryList}
-      />
-
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>المتاجر المتابعة</Text>
-      </View>
-      <FlatList
-        data={followedStores}
-        renderItem={renderStore}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.storeList}
-      />
-
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>المنتجات المتابعة</Text>
-      </View>
-      <FlatList
-        data={followedProducts}
-        renderItem={renderFavoriteProduct}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.productList}
-      />
-
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>المنتجات المقترحة</Text>
-      </View>
-      <FlatList
-        data={suggestedProducts}
-        renderItem={renderSuggestedProduct}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.productList}
-      />
-
-      <View style={styles.titleContainer}>
-        <Text style={styles.sectionTitle}>جميع العلامات التجارية</Text>
-      </View>
-      <FlatList
-        data={brands}
-        renderItem={renderBrandGridItem}
-        keyExtractor={(item) => item.id}
-        numColumns={1}
-        key={(numColumns) => `numColumns-${numColumns}`}
-        style={styles.brandGrid}
-      />
-      <View style={{ height: 100 }} /> {/* Extra space for bottom navigation */}
       <Modal
         isVisible={modalVisible}
         onBackdropPress={() => setModalVisible(false)}
@@ -707,7 +827,7 @@ const HomeScreen = () => {
                   <Icon name="add-circle-outline" size={30} color="#1E90FF" />
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.addToCartButton} onPress={handleAddToCart}>
+              <TouchableOpacity style={styles.addToCartButton} onPress={() => handleAddToCart(selectedProduct)}>
                 <Icon name="cart-outline" size={20} color="#fff" />
                 <Text style={styles.addToCartText}>إضافة إلى السلة</Text>
               </TouchableOpacity>
@@ -715,212 +835,364 @@ const HomeScreen = () => {
           )}
         </View>
       </Modal>
-    </ScrollView>
+
+      <CustomAlert
+        visible={showAuthAlert}
+        message={authMessage}
+        onLogin={handleLogin}
+        onCancel={() => setShowAuthAlert(false)}
+      />
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  scrollContent: {
-    paddingBottom: 100, // Ensure content is not obscured by bottom navigation
+  searchContainer: {
+    backgroundColor: '#fff',
+    padding: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  searchInput: {
+    backgroundColor: '#f5f5f5',
+    height: 40,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    fontSize: 14,
   },
   bannerContainer: {
-    marginBottom: 20,
+    marginBottom: 10,
+    borderRadius: 10,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   bannerImage: {
     width: '100%',
     height: 200,
     resizeMode: 'cover',
   },
-  searchInput: {
-    height: 40,
-    borderColor: '#ccc',
-    borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginHorizontal: 10,
-    marginBottom: 20,
-    borderRadius: 20,
-    boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)',
+  titleContainer: {
+    flexDirection: 'row-r',
+    alignItems: 'center',
+    marginBottom: 6,
+    marginTop: 6,
+    paddingHorizontal: 5,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
+    marginLeft: 10,
     color: '#333',
-    marginBottom: 10,
+    textAlign: 'right',
   },
   categoryList: {
-    paddingLeft: 10,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   categoryItem: {
+    width: 80,
+    marginLeft: 8,
     alignItems: 'center',
-    marginRight: 15,
   },
   categoryImageContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#3d4785',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: '#f5f5f5',
+    marginBottom: 4,
+    backgroundColor: '#fff',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   categoryImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   categoryText: {
-    color: '#333',
-    fontSize: 14,
-    fontWeight: 'bold',
     textAlign: 'center',
+    fontSize: 12,
+    color: '#333',
     marginTop: 5,
+    writingDirection: 'rtl',
   },
   storeList: {
-    paddingLeft: 10,
     marginBottom: 20,
-    marginLeft: 10,
   },
   storeCard: {
     backgroundColor: '#fff',
-    borderRadius: 10,
-    marginRight: 15,
-    width: 250,
-    overflow: 'hidden',
+    borderRadius: 15,
+    padding: 15,
+    margin: 8,
+    width: width * 0.35,
+    alignItems: 'center',
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  storeImage: {
-    width: '100%',
-    height: 120,
-    resizeMode: 'cover',
-  },
-  storeInfo: {
-    padding: 10,
-  },
-  storeName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
-    textAlign: 'left',
-  },
-  storeType: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 5,
-    textAlign: 'left',
-  },
-  storeRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  storeRatingText: {
-    fontSize: 14,
-    color: '#333',
-    marginLeft: 5,
-  },
-  storeFollowers: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'left',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
   },
   storeLogo: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 10,
+  },
+  storeInfo: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  storeName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  storeStats: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  statItem: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    marginLeft: 15,
+  },
+  statText: {
+    fontSize: 12,
+    color: '#666',
+    marginRight: 4,
   },
   productList: {
-    paddingLeft: 10,
     marginBottom: 20,
-    marginLeft: 10,
   },
   card: {
     backgroundColor: '#fff',
     borderRadius: 10,
-    marginRight: 15,
-    width: 140,
-    overflow: 'hidden',
+    padding: 10,
+    marginHorizontal: 8,
+    marginBottom: 16,
+    width: width * 0.45,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 5,
+    shadowRadius: 4,
     elevation: 3,
+  },
+  productCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    margin: 8,
+    width: width * 0.42,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: 'hidden',
   },
   productImage: {
     width: '100%',
-    height: 100,
+    height: width * 0.42,
     resizeMode: 'cover',
   },
   cardContent: {
-    padding: 10,
+    flex: 1,
+    alignItems: 'flex-end',
   },
   productName: {
-    fontSize: 12,
-    color: '#333',
-    marginBottom: 5,
-    textAlign: 'left',
-    
-  },
-  priceText: {
     fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6,
+    textAlign: 'right',
+  },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  price: {
+    fontSize: 16,
+    fontWeight: '700',
     color: '#3d4785',
-    fontWeight: 'bold',
-    marginBottom: 5,
-    textAlign: 'left',
+  },
+  discountPrice: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ff4444',
+  },
+  originalPrice: {
+    fontSize: 12,
+    color: '#999',
+    textDecorationLine: 'line-through',
+    marginLeft: 8,
+  },
+  discountBadge: {
+    backgroundColor: '#FF0000',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 6,
+  },
+  discountText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 4,
   },
-  modalContent: {
+  ratingText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 8,
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 20,
+    padding: 8,
+    zIndex: 1,
+  },
+  cartButton: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 20,
+    padding: 8,
+    zIndex: 1,
+  },
+  remiseCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 10,
+    marginHorizontal: 8,
+    marginBottom: 16,
+    width: width * 0.45,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  remiseProductImage: {
+    width: width * 0.4,
+    height: 150,
+    resizeMode: 'cover',
+    borderRadius: 8,
+  },
+  remiseCardContent: {
+    flex: 1,
+    alignItems: 'flex-end',
+    marginTop: 8,
+  },
+  remiseProductName: {
+    fontWeight: 'bold',
+    marginBottom: 5,
+    fontSize: 13,
+    color: '#333',
+    textAlign: 'right',
+    width: '100%',
+  },
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#ff6347',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#3d4785',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
+    elevation: 2,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  modalContent: {
     margin: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalInnerContent: {
-    width: '90%',
-    backgroundColor: 'white',
-    borderRadius: 20,
+    backgroundColor: '#fff',
     padding: 20,
+    borderRadius: 10,
+    width: '90%',
     alignItems: 'center',
+    elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowRadius: 3.84,
   },
   modalImage: {
     width: 200,
     height: 200,
+    resizeMode: 'cover',
+    marginBottom: 20,
     borderRadius: 10,
-    marginBottom: 15,
   },
   modalProductName: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: 'bold',
-    textAlign: 'center',
     marginBottom: 10,
+    color: '#333',
+    textAlign: 'center',
   },
   modalProductDescription: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
     color: '#666',
+    marginBottom: 20,
+    textAlign: 'center',
+    fontSize: 14,
   },
   quantityContainer: {
     flexDirection: 'row',
@@ -929,62 +1201,22 @@ const styles = StyleSheet.create({
   },
   quantityText: {
     fontSize: 18,
-    marginHorizontal: 10,
+    marginHorizontal: 15,
+    color: '#333',
   },
   addToCartButton: {
+    backgroundColor: '#3d4785',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4e73df',
-    padding: 10,
-    borderRadius: 5,
-    marginTop: 20,
+    elevation: 2,
   },
   addToCartText: {
     color: '#fff',
-    marginLeft: 5,
-  },
-  remiseCard: {
-    backgroundColor: '#FFD700', // Shiny gold background
-    borderRadius: 10,
-    marginRight: 15,
-    width: 140,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  remiseIconContainer: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 10,
-    padding: 2,
-  },
-  brandList: {
-    paddingLeft: 10,
-    marginBottom: 20,
-  },
-  brandItem: {
-    alignItems: 'center',
-    marginRight: 15,
-    width: 80,
-  },
-  brandLogo: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    marginBottom: 5,
-  },
-  brandName: {
-    fontSize: 12,
-    color: '#333',
-    textAlign: 'center',
+    marginLeft: 10,
+    fontSize: 16,
   },
   brandGrid: {
     marginBottom: 20,
@@ -992,91 +1224,269 @@ const styles = StyleSheet.create({
   brandGridItem: {
     width: '100%',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 10,
+    marginBottom: 20,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderColor: '#ccc',
+    padding: 15,
+    borderRadius: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   brandGridLogo: {
-    width: '100%',
-    height: 150,
+    width: 120,
+    height: 120,
     resizeMode: 'contain',
+    marginBottom: 10,
   },
   brandGridName: {
     fontSize: 16,
     color: '#333',
     textAlign: 'center',
+  },
+  // Yeni kategori grid stilleri
+  categoryGrid: {
+    padding: 5,
+    marginBottom: 15,
+  },
+  categoryGridItem: {
+    flex: 1,
+    margin: 5,
+    aspectRatio: 1,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  categoryGridImage: {
+    width: '80%',
+    height: '60%',
+    resizeMode: 'contain',
+    marginBottom: 10,
+  },
+  categoryGridText: {
+    fontSize: 12,
+    textAlign: 'center',
+    color: '#333',
+    fontWeight: '500',
+  },
+  subCategoryGrid: {
+    padding: 5,
+    marginBottom: 15,
+  },
+  subCategoryGridItem: {
+    flex: 1,
+    margin: 5,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 10,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  subCategoryGridImage: {
+    width: '100%',
+    height: 100,
+    borderRadius: 8,
+    marginBottom: 8,
+    resizeMode: 'cover',
+  },
+  subCategoryGridText: {
+    fontSize: 13,
+    textAlign: 'center',
+    color: '#333',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  parentCategoryText: {
+    fontSize: 11,
+    color: '#666',
+    textAlign: 'center',
+  },
+  categoriesSection: {
+    marginVertical: 10,
+    paddingHorizontal: 10,
+  },
+  subCategoriesSection: {
+    marginVertical: 10,
+    paddingHorizontal: 10,
+    backgroundColor: '#f8f8f8',
+    paddingVertical: 15,
+  },
+  categoryCard: {
+    width: width / 4 - 15,
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  imageContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    marginBottom: 6,
+    overflow: 'hidden',
+  },
+  categoryName: {
+    fontSize: 12,
+    color: '#333',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  subCategoryCard: {
+    flex: 1,
+    margin: 5,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    maxWidth: width / 3 - 10,
+  },
+  mainCategoriesContainer: {
+    marginVertical: 10,
+    paddingHorizontal: 10,
+  },
+  mainCategoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     paddingVertical: 10,
   },
-  favoriteCard: {
-    backgroundColor: '#FFB6C1', // Light pink background
-    borderRadius: 10,
-    marginRight: 15,
-    width: 140,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  favoriteIconContainer: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 10,
-    padding: 2,
-  },
-  suggestedCard: {
-    backgroundColor: '#FFDAB9', // Light orange background
-    borderRadius: 10,
-    marginRight: 15,
-    width: 140,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  suggestedIconContainer: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 10,
-    padding: 2,
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start', // Aligns the title to the left
-    marginLeft: 10,
-  },
-  subcategoryItem: {
-    marginRight: 15,
+  mainCategoryItem: {
+    width: width / 4 - 15,
     alignItems: 'center',
+    marginBottom: 15,
   },
-  subcategoryImageContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  mainCategoryImageContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    marginBottom: 6,
     overflow: 'hidden',
-    marginBottom: 5,
   },
-  subcategoryImage: {
+  mainCategoryImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  subcategoryText: {
-    fontSize: 14,
+  mainCategoryName: {
+    fontSize: 12,
     color: '#333',
+    textAlign: 'center',
+    fontWeight: '500',
   },
-  subcategoryList: {
-    paddingLeft: 10,
-    marginBottom: 20,
+  subCategoriesContainer: {
+    marginVertical: 10,
+    paddingHorizontal: 10,
+    backgroundColor: '#f8f8f8',
+    paddingVertical: 15,
+  },
+  subCategoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  subCategoryItem: {
+    width: width / 3 - 15,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 15,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  subCategoryImage: {
+    width: '100%',
+    height: 100,
+    borderRadius: 8,
+    marginBottom: 8,
+    resizeMode: 'cover',
+  },
+  subCategoryName: {
+    fontSize: 13,
+    textAlign: 'center',
+    color: '#333',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  parentCategoryName: {
+    fontSize: 11,
+    textAlign: 'center',
+    color: '#666',
+  },
+  personalizedSection: {
+    margin: 15,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  blurContainer: {
+    padding: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+  },
+  subsectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginVertical: 12,
+    textAlign: 'right',
+  },
+  horizontalScroll: {
+    marginBottom: 15,
+  },
+  productCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    margin: 8,
+    width: width * 0.42,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  productInfo: {
+    padding: 12,
+  },
+  productPrice: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#3d4785',
+    textAlign: 'right',
   },
 });
 

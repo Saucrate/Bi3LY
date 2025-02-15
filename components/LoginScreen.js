@@ -3,14 +3,19 @@ import { View, Text, TextInput, Button, StyleSheet, Alert, TouchableOpacity, Ima
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import CustomAlert from './CustomAlert';
+import { authService } from '../services/authService';
+import LoadingSpinner from './LoadingSpinner';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LoginScreen = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
   const navigation = useNavigation();
   const scaleAnim = useRef(new Animated.Value(0)).current; // Initial scale value
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     Animated.timing(scaleAnim, {
@@ -20,15 +25,36 @@ const LoginScreen = () => {
     }).start();
   }, [scaleAnim]);
 
-  const handleLogin = () => {
-    if (username === 'saucrate' && password === '12341234') {
-      navigation.replace('ClientMain');
-    } else if (username === 'osama' && password === '12341234') {
-      navigation.replace('SellerMain');
-    } else if (username === 'admin' && password === 'admin123') {
-      navigation.replace('AdminMain');
-    } else {
+  const handleLogin = async () => {
+    try {
+      setLoading(true);
+      const response = await authService.login(username, password);
+      
+      if (response.success) {
+        const { role, isSellerVerified } = response.user;
+
+        // Kullanıcı rolüne göre yönlendirme
+        if (role === 'admin') {
+          navigation.replace('AdminMain');
+        } else if (role === 'seller' && isSellerVerified) {
+          navigation.replace('SellerMain');
+        } else {
+          // Client veya doğrulanmamış satıcı için ClientMain
+          navigation.replace('ClientMain');
+          
+          // Eğer doğrulanmamış satıcı ise bilgilendirme mesajı göster
+          if (role === 'seller' && !isSellerVerified) {
+            setAlertMessage('حسابك كبائع قيد المراجعة. يمكنك استخدام التطبيق كمستخدم عادي');
+            setAlertVisible(true);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setAlertMessage(error.error || 'حدث خطأ في تسجيل الدخول');
       setAlertVisible(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -38,6 +64,7 @@ const LoginScreen = () => {
 
   return (
     <View style={styles.container}>
+      {loading && <LoadingSpinner />}
       <Animated.Image
         source={require('../assets/icon.png')}
         style={[styles.logo, { transform: [{ scale: scaleAnim }] }]}
@@ -75,7 +102,7 @@ const LoginScreen = () => {
       </TouchableOpacity>
       <CustomAlert
         visible={alertVisible}
-        message="اسم المستخدم أو كلمة المرور غير صحيحة"
+        message={alertMessage}
         onClose={() => setAlertVisible(false)}
       />
     </View>

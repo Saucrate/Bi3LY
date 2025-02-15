@@ -1,40 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
 import { ProgressCircle } from 'react-native-svg-charts';
+import { sellerService } from '../services/sellerService';
 
 const screenWidth = Dimensions.get('window').width;
-
-const data = {
-  labels: ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو'],
-  datasets: [
-    {
-      data: [20, 45, 28, 80, 99, 43],
-      color: (opacity = 1) => `rgba(134, 65, 244, ${opacity})`, // optional
-      strokeWidth: 2 // optional
-    }
-  ],
-  legend: ['مبيعات الشهر'] // optional
-};
-
-const comparisonData = {
-  labels: ['المبيعات', 'العملاء', 'المكافآت'],
-  datasets: [
-    {
-      data: [80, 50, 5],
-      color: (opacity = 1) => `rgba(134, 65, 244, ${opacity})`, // optional
-      strokeWidth: 2 // optional
-    },
-    {
-      data: [60, 40, 3],
-      color: (opacity = 1) => `rgba(244, 65, 134, ${opacity})`, // optional
-      strokeWidth: 2 // optional
-    }
-  ],
-  legend: ['هذا الشهر', 'الشهر الماضي'] // optional
-};
 
 const chartConfig = {
   backgroundGradientFrom: '#fff',
@@ -61,9 +33,55 @@ const clients = [
 ];
 
 const StatisticsScreen = () => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({
+    basicStats: {
+      productsCount: 0,
+      customersCount: 0,
+      followersCount: 0,
+      rating: 0,
+      soldProductsCount: 0,
+      favoritesCount: 0
+    },
+    monthlyStats: [],
+    topProducts: [],
+    topCustomers: [],
+    comparison: {
+      currentMonth: {
+        sales: 0,
+        customers: 0,
+        rewards: 0
+      },
+      lastMonth: {
+        sales: 0,
+        customers: 0,
+        rewards: 0
+      }
+    },
+    pendingOrders: 0
+  });
   const [selectedStat, setSelectedStat] = useState('soldProducts');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      setLoading(true);
+      const response = await sellerService.getDetailedStats();
+      if (response.success) {
+        setStats(response.data);
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'حدث خطأ في تحميل الإحصائيات');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleStatClick = (stat) => {
     setSelectedStat(stat);
@@ -80,164 +98,190 @@ const StatisticsScreen = () => {
   };
 
   const getChartData = () => {
-    if (selectedProduct) {
-      return {
-        labels: ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو'],
-        datasets: [
-          {
-            data: [10, 20, 30, 40, 50, 60],
-            color: (opacity = 1) => `rgba(134, 65, 244, ${opacity})`,
-            strokeWidth: 2
-          }
-        ],
-        legend: [`مبيعات ${selectedProduct.name}`]
-      };
+    const arabicMonths = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+    ];
+
+    const last6Months = [];
+    const monthlyData = new Array(6).fill(0);
+    const labels = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const monthIndex = d.getMonth();
+      labels.push(arabicMonths[monthIndex]);
+      last6Months.push(monthIndex + 1);
     }
-    if (selectedClient) {
-      return {
-        labels: ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو'],
-        datasets: [
-          {
-            data: [5, 15, 25, 35, 45, 55],
-            color: (opacity = 1) => `rgba(134, 65, 244, ${opacity})`,
-            strokeWidth: 2
-          }
-        ],
-        legend: [`مشتريات ${selectedClient.name}`]
-      };
-    }
-    switch (selectedStat) {
-      case 'clients':
-        return {
-          labels: ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو'],
-          datasets: [
-            {
-              data: [5, 10, 15, 20, 25, 30],
-              color: (opacity = 1) => `rgba(134, 65, 244, ${opacity})`,
-              strokeWidth: 2
-            }
-          ],
-          legend: ['عدد العملاء']
-        };
-      case 'averageRating':
-        return {
-          labels: ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو'],
-          datasets: [
-            {
-              data: [3, 3.5, 4, 4.5, 5, 4.8],
-              color: (opacity = 1) => `rgba(134, 65, 244, ${opacity})`,
-              strokeWidth: 2
-            }
-          ],
-          legend: ['متوسط التقييم']
-        };
-      case 'favorites':
-        return {
-          labels: ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو'],
-          datasets: [
-            {
-              data: [10, 20, 30, 40, 50, 60],
-              color: (opacity = 1) => `rgba(134, 65, 244, ${opacity})`,
-              strokeWidth: 2
-            }
-          ],
-          legend: ['المفضلة']
-        };
-      default:
-        return data;
-    }
+
+    // Her istatistik türü için uygun veriyi seç
+    stats.monthlyStats.forEach(stat => {
+      const monthIndex = last6Months.indexOf(stat._id);
+      if (monthIndex !== -1) {
+        switch (selectedStat) {
+          case 'soldProducts':
+            monthlyData[monthIndex] = stat.count || 0; // Satılan ürün sayısı
+            break;
+          case 'revenue':
+            monthlyData[monthIndex] = stat.total || 0; // Toplam gelir
+            break;
+          case 'orders':
+            monthlyData[monthIndex] = stat.ordersCount || 0; // Sipariş sayısı
+            break;
+          case 'rating':
+            monthlyData[monthIndex] = stat.rating || 0; // Ortalama değerlendirme
+            break;
+        }
+      }
+    });
+
+    return {
+      labels,
+      datasets: [{
+        data: monthlyData,
+        color: (opacity = 1) => `rgba(61, 71, 133, ${opacity})`,
+        strokeWidth: 2
+      }],
+      legend: [getTitle()]
+    };
   };
 
   const getTitle = () => {
-    if (selectedProduct) {
-      return `إحصائيات ${selectedProduct.name}`;
-    }
-    if (selectedClient) {
-      return `مشتريات ${selectedClient.name}`;
-    }
     switch (selectedStat) {
-      case 'clients':
-        return 'عدد العملاء';
-      case 'averageRating':
-        return 'متوسط التقييم';
-      case 'favorites':
-        return 'المفضلة';
-      default:
+      case 'soldProducts':
         return 'المنتجات المباعة';
+      case 'revenue':
+        return 'الإيرادات';
+      case 'orders':
+        return 'الطلبات';
+      case 'rating':
+        return 'التقييمات';
+      default:
+        return '';
     }
   };
+
+  const getSectionContent = () => {
+    switch (selectedStat) {
+      case 'soldProducts':
+      case 'revenue':
+      case 'orders':
+      case 'rating':
+        return '';
+      default:
+        return '';
+    }
+  };
+
+  const getComparisonData = () => ({
+    labels: ['المبيعات', 'العملاء', 'المكافآت'],
+    datasets: [
+      {
+        data: [
+          stats.comparison.currentMonth.sales,
+          stats.comparison.currentMonth.customers,
+          stats.comparison.currentMonth.rewards
+        ],
+        color: (opacity = 1) => `rgba(134, 65, 244, ${opacity})`,
+        strokeWidth: 2
+      },
+      {
+        data: [
+          stats.comparison.lastMonth.sales,
+          stats.comparison.lastMonth.customers,
+          stats.comparison.lastMonth.rewards
+        ],
+        color: (opacity = 1) => `rgba(244, 65, 134, ${opacity})`,
+        strokeWidth: 2
+      }
+    ],
+    legend: ['هذا الشهر', 'الشهر الماضي']
+  });
+
+  // Progress değerlerini hesapla
+  const getProgress = (stat) => {
+    switch (stat) {
+      case 'products':
+        return stats.basicStats.productsCount / 100; // Maksimum 100 ürün
+      case 'customers':
+        return stats.basicStats.customersCount / 100; // Maksimum 100 müşteri
+      case 'followers':
+        return stats.basicStats.followersCount / 100; // Maksimum 100 takipçi
+      case 'rating':
+        return stats.basicStats.rating / 5; // 5 üzerinden
+      case 'soldProducts':
+        return stats.basicStats.soldProductsCount / 100; // Maksimum 100 satış
+      case 'favorites':
+        return stats.basicStats.favoritesCount / 100; // Maksimum 100 favori
+      default:
+        return 0;
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3d4785" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-          <TouchableOpacity onPress={() => handleStatClick('products')}>
-            <View style={styles.circleChartContainer}>
-              <ProgressCircle style={styles.circleChart} progress={0.7} progressColor={'#4682b4'} />
-              <Text style={styles.circleChartText}>عدد المنتجات</Text>
-              <Text style={styles.circleChartValue}>70</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleStatClick('clients')}>
-            <View style={styles.circleChartContainer}>
-              <ProgressCircle style={styles.circleChart} progress={0.5} progressColor={'#32cd32'} />
-              <Text style={styles.circleChartText}>عدد العملاء</Text>
-              <Text style={styles.circleChartValue}>50</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleStatClick('followers')}>
-            <View style={styles.circleChartContainer}>
-              <ProgressCircle style={styles.circleChart} progress={0.6} progressColor={'#4682b4'} />
-              <Text style={styles.circleChartText}>المتابعين</Text>
-              <Text style={styles.circleChartValue}>60</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleStatClick('averageRating')}>
-            <View style={styles.circleChartContainer}>
-              <ProgressCircle style={styles.circleChart} progress={0.8} progressColor={'#ffa500'} />
-              <Text style={styles.circleChartText}>متوسط التقييم</Text>
-              <Text style={styles.circleChartValue}>4.0</Text>
-            </View>
-          </TouchableOpacity>
           <TouchableOpacity onPress={() => handleStatClick('soldProducts')}>
             <View style={styles.circleChartContainer}>
-              <ProgressCircle style={styles.circleChart} progress={0.6} progressColor={'#ff6347'} />
-              <Text style={styles.circleChartText}>المنتجات المباعة</Text>
-              <Text style={styles.circleChartValue}>60</Text>
+              <ProgressCircle 
+                style={styles.circleChart} 
+                progress={stats.basicStats.soldProductsCount / 100}
+                progressColor={'#4682b4'} 
+              />
+              <Text style={styles.circleChartText}>المبيعات</Text>
+              <Text style={styles.circleChartValue}>{stats.basicStats.soldProductsCount}</Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleStatClick('favorites')}>
+
+          <TouchableOpacity onPress={() => handleStatClick('revenue')}>
             <View style={styles.circleChartContainer}>
-              <ProgressCircle style={styles.circleChart} progress={0.4} progressColor={'#4682b4'} />
-              <Text style={styles.circleChartText}>المفضلة</Text>
-              <Text style={styles.circleChartValue}>40</Text>
+              <ProgressCircle 
+                style={styles.circleChart} 
+                progress={stats.comparison.currentMonth.sales / 10000}
+                progressColor={'#32cd32'} 
+              />
+              <Text style={styles.circleChartText}>الإيرادات</Text>
+              <Text style={styles.circleChartValue}>{stats.comparison.currentMonth.sales}</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => handleStatClick('orders')}>
+            <View style={styles.circleChartContainer}>
+              <ProgressCircle 
+                style={styles.circleChart} 
+                progress={stats.pendingOrders / 50}
+                progressColor={'#ffa500'} 
+              />
+              <Text style={styles.circleChartText}>الطلبات</Text>
+              <Text style={styles.circleChartValue}>{stats.pendingOrders}</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => handleStatClick('rating')}>
+            <View style={styles.circleChartContainer}>
+              <ProgressCircle 
+                style={styles.circleChart} 
+                progress={stats.basicStats.rating / 5}
+                progressColor={'#ff6347'} 
+              />
+              <Text style={styles.circleChartText}>التقييم</Text>
+              <Text style={styles.circleChartValue}>{stats.basicStats.rating.toFixed(1)}</Text>
             </View>
           </TouchableOpacity>
         </ScrollView>
-        {selectedStat === 'products' && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-            {products.map((product, index) => (
-              <TouchableOpacity key={index} onPress={() => handleProductClick(product)}>
-                <View style={styles.productContainer}>
-                  <Image source={{ uri: product.image }} style={styles.productImage} />
-                  <Text style={styles.productText}>{product.name}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-        {selectedStat === 'clients' && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-            {clients.map((client, index) => (
-              <TouchableOpacity key={index} onPress={() => handleClientClick(client)}>
-                <View style={styles.productContainer}>
-                  <Image source={{ uri: client.image }} style={styles.productImage} />
-                  <Text style={styles.productText}>{client.name}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{getTitle()}</Text>
           <LineChart
@@ -247,31 +291,19 @@ const StatisticsScreen = () => {
             chartConfig={chartConfig}
             style={styles.chart}
           />
+          <Text style={styles.sectionContent}>{getSectionContent()}</Text>
         </View>
+
+        {/* Karşılaştırma grafiği */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>مقارنة الشهر الحالي بالشهر الماضي</Text>
+          <Text style={styles.sectionTitle}>مقارنة مع الشهر السابق</Text>
           <BarChart
-            data={comparisonData}
+            data={getComparisonData()}
             width={screenWidth - 40}
             height={220}
             chartConfig={chartConfig}
             style={styles.chart}
           />
-        </View>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>المكافآت</Text>
-          <FontAwesome name="gift" size={24} color="#ff6347" />
-          <Text style={styles.sectionContent}>لديك 5 مكافآت جديدة!</Text>
-        </View>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>الطلبات</Text>
-          <FontAwesome name="list-alt" size={24} color="#32cd32" />
-          <Text style={styles.sectionContent}>لديك 10 طلبات جديدة.</Text>
-        </View>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>اقتراحات</Text>
-          <FontAwesome name="lightbulb-o" size={24} color="#ffa500" />
-          <Text style={styles.sectionContent}>نقترح عليك تحسين وصف المنتجات لزيادة المبيعات.</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -358,6 +390,11 @@ const styles = StyleSheet.create({
   chart: {
     marginTop: 20,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  }
 });
 
 export default StatisticsScreen;

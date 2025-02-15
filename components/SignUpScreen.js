@@ -1,69 +1,124 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Text, StyleSheet, Image, Animated, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, TextInput, TouchableOpacity, Text, StyleSheet, Image, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import CustomAlert from './CustomAlert';
-import * as ImagePicker from 'expo-image-picker';
+import { authService } from '../services/authService';
+import LoadingSpinner from './LoadingSpinner';
+import { useNavigation } from '@react-navigation/native';
 
 const SignUpScreen = () => {
+  const navigation = useNavigation();
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState('');
-  const [verificationCode, setVerificationCode] = useState(['', '', '', '', '']);
+  const [verificationCode, setVerificationCode] = useState(['', '', '', '', '', '']);
   const [name, setName] = useState('');
   const [role, setRole] = useState('client');
-  const [idCardImage, setIdCardImage] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [sellerProofImage, setSellerProofImage] = useState(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
-  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const [loading, setLoading] = useState(false);
+  const [sellerInfo, setSellerInfo] = useState({
+    idNumber: '',
+    businessNumber: ''
+  });
   const codeInputs = useRef([]);
-  const [showImagePickerAlert, setShowImagePickerAlert] = useState(false);
-  const [currentImageSetter, setCurrentImageSetter] = useState(null);
-  const [image, setImage] = useState(null);
-
-  useEffect(() => {
-    Animated.timing(scaleAnim, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
-  }, [scaleAnim]);
 
   const isValidEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   };
 
-  const handleVerifyEmail = () => {
-    if (!email) {
-      setAlertMessage('يرجى إدخال البريد الإلكتروني');
-      setAlertVisible(true);
-    } else if (!isValidEmail(email)) {
-      setAlertMessage('يرجى إدخال بريد إلكتروني صالح');
-      setAlertVisible(true);
-    } else {
-      setStep(2);
-    }
-  };
-
-  const handleVerifyCode = () => {
-    if (verificationCode.join('') === '00001') {
-      setStep(3);
-    } else {
-      setAlertMessage('رمز التحقق غير صحيح');
-      setAlertVisible(true);
-    }
-  };
-
   const handleCodeChange = (text, index) => {
-    const newCode = [...verificationCode];
-    newCode[index] = text;
-    setVerificationCode(newCode);
+    if (text.length <= 1) {
+      const newCode = [...verificationCode];
+      newCode[index] = text;
+      setVerificationCode(newCode);
 
-    if (text && index < codeInputs.current.length - 1) {
-      codeInputs.current[index + 1].focus();
+      // Sonraki input'a geç
+      if (text.length === 1 && index < 5) {
+        codeInputs.current[index + 1].focus();
+      }
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    try {
+      setLoading(true);
+      const code = verificationCode.join('');
+
+      if (code.length !== 6) {
+        setAlertMessage('يرجى إدخال جميع الأرقام');
+        setAlertVisible(true);
+        return;
+      }
+
+      await authService.verifyEmail(email, code);
+      setAlertMessage('تم التحقق بنجاح');
+      setAlertVisible(true);
+      
+      setTimeout(() => {
+        navigation.navigate('تسجيل الدخول');
+      }, 2000);
+
+    } catch (error) {
+      setAlertMessage(error.toString());
+      setAlertVisible(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyEmail = async () => {
+    try {
+      // Form validasyonu
+      if (!name || !email || !password || !phoneNumber) {
+        setAlertMessage('يرجى ملء جميع الحقول المطلوبة');
+        setAlertVisible(true);
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        setAlertMessage('يرجى إدخال بريد إلكتروني صالح');
+        setAlertVisible(true);
+        return;
+      }
+
+      setLoading(true);
+
+      // Debug için
+      console.log('Sending registration data:', {
+        name,
+        email,
+        password,
+        role,
+        phoneNumber,
+        sellerInfo: role === 'seller' ? sellerInfo : undefined
+      });
+
+      const response = await authService.register({
+        name,
+        email,
+        password,
+        role,
+        phoneNumber,
+        sellerInfo: role === 'seller' ? sellerInfo : undefined
+      });
+      
+      if (response.success) {
+        setAlertMessage('تم التسجيل بنجاح وتم إرسال رمز التحقق');
+        setAlertVisible(true);
+        setTimeout(() => {
+          setStep(3);
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      setAlertMessage(error.response?.data?.error || 'حدث خطأ في عملية التسجيل');
+      setAlertVisible(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -76,69 +131,52 @@ const SignUpScreen = () => {
     }
   };
 
-  const handleSignUp = () => {
+  const handleNextStep = () => {
+    // Tüm gerekli alanların kontrolü
+    if (!name || !phoneNumber || !password || !confirmPassword) {
+      setAlertMessage('يرجى ملء جميع الحقول المطلوبة');
+      setAlertVisible(true);
+      return;
+    }
+
+    // Şifre kontrolü
     if (password !== confirmPassword) {
       setAlertMessage('كلمات المرور غير متطابقة');
       setAlertVisible(true);
-    } else {
-      // Handle sign-up logic here
-    }
-  };
-
-  const pickImage = async () => {
-    // Request permission to access media library
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'We need access to your photo library to select photos.');
       return;
     }
 
-    // Launch image library
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
-  };
-
-  const takePhoto = async () => {
-    // Request permission to access camera
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'We need access to your camera to take photos.');
+    // Şifre uzunluğu kontrolü
+    if (password.length < 6) {
+      setAlertMessage('يجب أن تكون كلمة المرور 6 أحرف على الأقل');
+      setAlertVisible(true);
       return;
     }
 
-    // Launch camera
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
-  };
-
-  const showImagePickerOptions = (setImage) => {
-    setCurrentImageSetter(() => (uri) => {
-      if (setImage === setIdCardImage) {
-        setIdCardImage({ uri });
-      } else if (setImage === setSellerProofImage) {
-        setSellerProofImage({ uri });
+    // Satıcı rolü için ek kontroller
+    if (role === 'seller') {
+      if (!sellerInfo.idNumber || !sellerInfo.businessNumber) {
+        setAlertMessage('يرجى إدخال جميع المعلومات المطلوبة');
+        setAlertVisible(true);
+        return;
       }
-    });
-    setShowImagePickerAlert(true);
-  };
 
-  const selectImage = (setImage) => {
-    showImagePickerOptions(setImage);
+      // Kimlik numarası kontrolü (örnek: 11 haneli)
+      if (sellerInfo.idNumber.length !== 11) {
+        setAlertMessage('رقم الهوية يجب أن يكون 11 رقمًا');
+        setAlertVisible(true);
+        return;
+      }
+
+      // İş/Ticari sicil numarası kontrolü (örnek: en az 5 haneli)
+      if (sellerInfo.businessNumber.length < 5) {
+        setAlertMessage('رقم السجل التجاري يجب أن يكون 5 أرقام على الأقل');
+        setAlertVisible(true);
+        return;
+      }
+    }
+
+    setStep(2);
   };
 
   const handleBack = () => {
@@ -147,208 +185,210 @@ const SignUpScreen = () => {
     }
   };
 
-  return (
-    // <KeyboardAvoidingView
-    //   // style={{ flex: 1 }}
-    //   // behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    //   // keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-    // >
-      <ScrollView contentContainerStyle={styles.scrollContainer} style={styles.scrollView}>
-        <View style={styles.container}>
-          {step > 1 && (
-            <TouchableOpacity style={styles.backArrow} onPress={handleBack}>
-              <Ionicons name="arrow-back" size={24} color="#000" />
-            </TouchableOpacity>
-          )}
-          <Animated.Image
-            source={require('../assets/icon.png')}
-            style={[styles.logo, { transform: [{ scale: scaleAnim }] }]}
+  // Seller bilgileri için input alanları
+  const renderSellerFields = () => {
+    if (role !== 'seller') return null;
+
+    return (
+      <View style={[styles.inputContainer, styles.sellerContainer]}>
+        <Text style={styles.documentsTitle}>معلومات البائع المطلوبة</Text>
+        
+        <View style={styles.inputSection}>
+          <Ionicons name="card-outline" size={20} color="#4a4a4a" />
+          <TextInput
+            style={styles.input}
+            placeholder="رقم الهوية (11 رقم)"
+            value={sellerInfo.idNumber}
+            onChangeText={(text) => setSellerInfo(prev => ({...prev, idNumber: text}))}
+            keyboardType="numeric"
+            maxLength={11}
           />
-          {step === 1 && (
+        </View>
+
+        <View style={[styles.inputSection, { marginTop: 15 }]}>
+          <Ionicons name="business-outline" size={20} color="#4a4a4a" />
+          <TextInput
+            style={styles.input}
+            placeholder="رقم السجل التجاري"
+            value={sellerInfo.businessNumber}
+            onChangeText={(text) => setSellerInfo(prev => ({...prev, businessNumber: text}))}
+            keyboardType="numeric"
+            maxLength={10}
+          />
+        </View>
+      </View>
+    );
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.scrollContainer} style={styles.scrollView}>
+      <View style={styles.container}>
+        {loading && <LoadingSpinner />}
+        {step > 1 && (
+          <TouchableOpacity style={styles.backArrow} onPress={handleBack}>
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
+        )}
+        <Image
+          source={require('../assets/icon.png')}
+          style={styles.logo}
+        />
+
+        {/* İlk Adım - Kişisel Bilgiler */}
+        {step === 1 && (
+          <>
             <View style={styles.inputContainer}>
               <View style={styles.inputSection}>
-                <Ionicons name="mail-outline" size={20} color="#4a4a4a" />
+                <Ionicons name="person-outline" size={20} color="#4a4a4a" />
                 <TextInput
                   style={styles.input}
-                  placeholder="البريد الإلكتروني"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
+                  placeholder="الاسم"
+                  value={name}
+                  onChangeText={setName}
                 />
               </View>
-              <TouchableOpacity style={styles.verifyButton} onPress={handleVerifyEmail}>
-                <Text style={styles.buttonText}>تحقق</Text>
-              </TouchableOpacity>
             </View>
-          )}
-          {step === 2 && (
             <View style={styles.inputContainer}>
-              <Text style={styles.verificationLabel}>أدخل رمز التحقق</Text>
-              <View style={styles.codeInputContainer}>
-                {verificationCode.map((digit, index) => (
-                  <TextInput
-                    key={index}
-                    ref={(el) => (codeInputs.current[index] = el)}
-                    style={styles.codeInput}
-                    value={digit}
-                    onChangeText={(text) => handleCodeChange(text, index)}
-                    keyboardType="numeric"
-                    maxLength={1}
-                    onFocus={() => {
-                      codeInputs.current[index].setNativeProps({
-                        style: { borderColor: '#3d4785' },
-                      });
-                    }}
-                    onBlur={() => {
-                      codeInputs.current[index].setNativeProps({
-                        style: { borderColor: '#000' },
-                      });
-                    }}
-                    onKeyPress={(e) => handleKeyPress(e, index)}
-                  />
-                ))}
+              <View style={styles.inputSection}>
+                <Ionicons name="call-outline" size={20} color="#4a4a4a" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="رقم الهاتف"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                />
               </View>
+            </View>
+            <View style={styles.inputContainer}>
+              <Text style={styles.roleText}>اختر دورك:</Text>
+              <View style={styles.roleContainer}>
+                <TouchableOpacity
+                  style={[styles.roleButton, role === 'client' && styles.selectedRole]}
+                  onPress={() => setRole('client')}
+                >
+                  <Text style={styles.buttonText}>عميل</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.roleButton, role === 'seller' && styles.selectedRole]}
+                  onPress={() => setRole('seller')}
+                >
+                  <Text style={styles.buttonText}>بائع</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.inputContainer}>
+              <View style={styles.inputSection}>
+                <Ionicons name="lock-closed-outline" size={20} color="#4a4a4a" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="كلمة المرور"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+              </View>
+            </View>
+            <View style={styles.inputContainer}>
+              <View style={styles.inputSection}>
+                <Ionicons name="lock-closed-outline" size={20} color="#4a4a4a" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="تأكيد كلمة المرور"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                />
+              </View>
+            </View>
+            <TouchableOpacity style={styles.loginButton} onPress={handleNextStep}>
+              <Text style={styles.loginButtonText}>التالي</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* İkinci Adım - Email Girişi */}
+        {step === 2 && (
+          <View style={styles.inputContainer}>
+            <View style={styles.inputSection}>
+              <Ionicons name="mail-outline" size={20} color="#4a4a4a" />
+              <TextInput
+                style={styles.input}
+                placeholder="البريد الإلكتروني"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+              />
+            </View>
+            <TouchableOpacity style={styles.verifyButton} onPress={handleVerifyEmail}>
+              <Text style={styles.buttonText}>تحقق</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Üçüncü Adım - Doğrulama Kodu */}
+        {step === 3 && (
+          <View style={styles.inputContainer}>
+            <Text style={styles.verificationLabel}>أدخل رمز التحقق</Text>
+            <View style={styles.codeInputContainer}>
+              {verificationCode.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={(el) => (codeInputs.current[index] = el)}
+                  style={styles.codeInput}
+                  value={digit}
+                  onChangeText={(text) => handleCodeChange(text, index)}
+                  keyboardType="numeric"
+                  maxLength={1}
+                  onFocus={() => {
+                    codeInputs.current[index].setNativeProps({
+                      style: { borderColor: '#3d4785' },
+                    });
+                  }}
+                  onBlur={() => {
+                    codeInputs.current[index].setNativeProps({
+                      style: { borderColor: '#000' },
+                    });
+                  }}
+                  onKeyPress={(e) => handleKeyPress(e, index)}
+                />
+              ))}
+            </View>
+            <View style={styles.verificationActions}>
               <TouchableOpacity style={styles.verifyButton} onPress={handleVerifyCode}>
                 <Text style={styles.buttonText}>تحقق</Text>
               </TouchableOpacity>
-            </View>
-          )}
-          {step === 3 && (
-            <>
-              <View style={styles.inputContainer}>
-                <View style={styles.inputSection}>
-                  <Ionicons name="person-outline" size={20} color="#4a4a4a" />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="الاسم"
-                    value={name}
-                    onChangeText={setName}
-                  />
-                </View>
-              </View>
-              <View style={styles.inputContainer}>
-                <View style={styles.inputSection}>
-                  <Ionicons name="call-outline" size={20} color="#4a4a4a" />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="رقم الهاتف"
-                    value={phoneNumber}
-                    onChangeText={setPhoneNumber}
-                    keyboardType="phone-pad"
-                  />
-                </View>
-              </View>
-              <View style={styles.inputContainer}>
-                <Text style={styles.roleText}>اختر دورك:</Text>
-                <View style={styles.roleContainer}>
-                  <TouchableOpacity
-                    style={[styles.roleButton, role === 'client' && styles.selectedRole]}
-                    onPress={() => setRole('client')}
-                  >
-                    <Text style={styles.buttonText}>عميل</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.roleButton, role === 'seller' && styles.selectedRole]}
-                    onPress={() => setRole('seller')}
-                  >
-                    <Text style={styles.buttonText}>بائع</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              {role === 'seller' && (
-                <>
-                  <View style={styles.inputContainer}>
-                    <TouchableOpacity 
-                      style={styles.imagePicker} 
-                      onPress={() => {
-                        console.log('ID Card Image Picker Clicked');
-                        showImagePickerOptions(setIdCardImage);
-                      }}
-                    >
-                      <Ionicons name="card-outline" size={20} color="#fff" />
-                      <Text style={styles.buttonText}>اختر صورة الهوية</Text>
-                    </TouchableOpacity>
-                    {idCardImage && idCardImage.uri && (
-                      <Image source={{ uri: idCardImage.uri }} style={styles.imagePreview} />
-                    )}
-                  </View>
-                  <View style={styles.inputContainer}>
-                    <TouchableOpacity 
-                      style={styles.imagePicker} 
-                      onPress={() => {
-                        console.log('Seller Proof Image Picker Clicked');
-                        showImagePickerOptions(setSellerProofImage);
-                      }}
-                    >
-                      <Ionicons name="document-outline" size={20} color="#fff" />
-                      <Text style={styles.buttonText}>اختر إثبات البائع</Text>
-                    </TouchableOpacity>
-                    {sellerProofImage && sellerProofImage.uri && (
-                      <Image source={{ uri: sellerProofImage.uri }} style={styles.imagePreview} />
-                    )}
-                  </View>
-                </>
-              )}
-              <View style={styles.inputContainer}>
-                <View style={styles.inputSection}>
-                  <Ionicons name="lock-closed-outline" size={20} color="#4a4a4a" />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="كلمة المرور"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                  />
-                </View>
-              </View>
-              <View style={styles.inputContainer}>
-                <View style={styles.inputSection}>
-                  <Ionicons name="lock-closed-outline" size={20} color="#4a4a4a" />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="تأكيد كلمة المرور"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry
-                  />
-                </View>
-              </View>
-              <TouchableOpacity style={styles.loginButton} onPress={handleSignUp}>
-                <Text style={styles.loginButtonText}>تسجيل</Text>
+              <TouchableOpacity 
+                style={styles.resendButton} 
+                onPress={async () => {
+                  try {
+                    setLoading(true);
+                    await authService.sendVerificationCode(email);
+                    setVerificationCode(['', '', '', '', '', '']); // Inputları temizle
+                    setAlertMessage('تم إرسال رمز جديد');
+                    setAlertVisible(true);
+                  } catch (error) {
+                    setAlertMessage(error.toString());
+                    setAlertVisible(true);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+              >
+                <Text style={styles.resendButtonText}>إعادة إرسال الرمز</Text>
               </TouchableOpacity>
-            </>
-          )}
-          <CustomAlert
-            visible={showImagePickerAlert}
-            message={
-              <View style={styles.alertOptions}>
-                <TouchableOpacity 
-                  style={styles.alertOption} 
-                  onPress={pickImage}
-                >
-                  <Ionicons name="image" size={24} color="#3d4785" />
-                  <Text style={styles.alertOptionText}>اختيار من المعرض</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.alertOption} 
-                  onPress={takePhoto}
-                >
-                  <Ionicons name="camera" size={24} color="#3d4785" />
-                  <Text style={styles.alertOptionText}>التقاط صورة</Text>
-                </TouchableOpacity>
-              </View>
-            }
-            onClose={() => setShowImagePickerAlert(false)}
-          />
-          <CustomAlert
-            visible={alertVisible}
-            message={alertMessage}
-            onClose={() => setAlertVisible(false)}
-          />
-          {image && <Image source={{ uri: image }} style={styles.imagePreview} />}
-        </View>
-      </ScrollView>
-    // </KeyboardAvoidingView>
+            </View>
+          </View>
+        )}
+
+        <CustomAlert
+          visible={alertVisible}
+          message={alertMessage}
+          onClose={() => setAlertVisible(false)}
+        />
+        {role === 'seller' && renderSellerFields()}
+      </View>
+    </ScrollView>
   );
 };
 
@@ -400,18 +440,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   codeInputContainer: {
-    flexDirection: 'row', // Changed from 'row-reverse' to 'row'
-    justifyContent: 'space-between',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 20,
+    paddingHorizontal: 10,
   },
   codeInput: {
-    width: 50,
-    height: 50,
+    width: 45,
+    height: 45,
     borderWidth: 2,
     borderColor: '#000',
     borderRadius: 10,
     textAlign: 'center',
     fontSize: 18,
+    marginHorizontal: 2,
   },
   inputSection: {
     flexDirection: 'row',
@@ -504,6 +547,54 @@ const styles = StyleSheet.create({
     color: '#3d4785',
     marginLeft: 10,
     textAlign: 'center',
+  },
+  verificationActions: {
+    alignItems: 'center',
+    gap: 10,
+  },
+  resendButton: {
+    marginTop: 10,
+    padding: 5,
+  },
+  resendButtonText: {
+    color: '#3d4785',
+    textDecorationLine: 'underline',
+    fontSize: 14,
+  },
+  sellerContainer: {
+    marginTop: 10,
+    width: '90%',
+  },
+  documentsTitle: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  documentPreview: {
+    width: 40,
+    height: 40,
+    borderRadius: 5,
+    marginLeft: 'auto'
+  },
+  documentUpload: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  documentUploaded: {
+    borderColor: '#4CAF50',
+    backgroundColor: '#F1F8E9',
+  },
+  documentText: {
+    marginLeft: 10,
+    color: '#333',
+    fontSize: 14,
   },
 });
 

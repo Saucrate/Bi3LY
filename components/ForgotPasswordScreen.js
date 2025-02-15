@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, Text, StyleSheet, Image, Animated, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import CustomAlert from './CustomAlert';
+import { authService } from '../services/authService';
+import LoadingSpinner from './LoadingSpinner';
 
 const ForgotPasswordScreen = () => {
   const [email, setEmail] = useState('');
@@ -13,6 +15,7 @@ const ForgotPasswordScreen = () => {
   const [alertMessage, setAlertMessage] = useState('');
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const codeInputs = useRef([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     Animated.timing(scaleAnim, {
@@ -27,33 +30,48 @@ const ForgotPasswordScreen = () => {
     return emailRegex.test(email);
   };
 
-  const handleEmailVerification = () => {
-    if (!email) {
-      setAlertMessage('يرجى إدخال البريد الإلكتروني');
-      setAlertVisible(true);
-    } else if (!isValidEmail(email)) {
-      setAlertMessage('يرجى إدخال بريد إلكتروني صالح');
-      setAlertVisible(true);
-    } else {
+  const handleEmailVerification = async () => {
+    try {
+      setLoading(true);
+      await authService.forgotPassword(email);
       setStep(2);
-    }
-  };
-
-  const handleCodeVerification = () => {
-    if (verificationCode.join('') === '00001') {
-      setStep(3);
-    } else {
-      setAlertMessage('رمز التحقق غير صحيح');
+    } catch (error) {
+      setAlertMessage(error.toString());
       setAlertVisible(true);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handlePasswordReset = () => {
+  const handleCodeVerification = async () => {
+    try {
+      setLoading(true);
+      // Kodu doğrulama işlemi backend'de resetPassword sırasında yapılacak
+      setStep(3);
+    } catch (error) {
+      setAlertMessage(error.toString());
+      setAlertVisible(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
     if (newPassword !== confirmPassword) {
       setAlertMessage('كلمات المرور غير متطابقة');
       setAlertVisible(true);
-    } else {
-      // Handle password reset logic here
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await authService.resetPassword(email, verificationCode.join(''), newPassword);
+      navigation.replace('Login');
+    } catch (error) {
+      setAlertMessage(error.toString());
+      setAlertVisible(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -85,6 +103,7 @@ const ForgotPasswordScreen = () => {
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer} style={styles.scrollView}>
       <View style={styles.container}>
+        {loading && <LoadingSpinner />}
         {step > 1 && (
           <TouchableOpacity style={styles.backArrow} onPress={handleBack}>
             <Ionicons name="arrow-back" size={24} color="#000" />

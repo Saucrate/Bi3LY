@@ -18,6 +18,7 @@ import LoginScreen from './components/LoginScreen';
 import SellersControlScreen from './components/SellersControlScreen'; // Import the SellersControlScreen
 import ChangeProfileScreen from './components/ChangeProfileScreen'; // Import the ChangeProfileScreen
 import AdminProfileScreen from './components/AdminProfileScreen'; // Import the AdminProfileScreen
+import StoreScreen from './components/StoreScreen';
 
 const Stack = createStackNavigator();
 
@@ -42,6 +43,21 @@ const App = () => {
         <Stack.Screen name="SellersControl" component={SellersControlScreen} options={{ title: 'التحكم في البائعين' }} /> 
         <Stack.Screen name="ChangeProfileScreen" component={ChangeProfileScreen} options={{ title: 'تغيير الملف الشخصي' }} /> 
         <Stack.Screen name="AdminProfileScreen" component={AdminProfileScreen} />
+        <Stack.Screen 
+          name="Store" 
+          component={StoreScreen} 
+          options={{ 
+            title: 'المتجر',
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#3d4785',
+            },
+            headerTintColor: '#fff',
+            headerTitleStyle: {
+              fontWeight: 'bold',
+            },
+          }} 
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

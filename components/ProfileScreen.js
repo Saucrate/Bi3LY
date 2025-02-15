@@ -3,12 +3,16 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, Modal } fro
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome } from '@expo/vector-icons'; // Ensure you have this icon library installed
 import { useNavigation } from '@react-navigation/native'; // Import useNavigation
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
+import { authService } from '../services/authService'; // import { } içine alındı
 
 const ProfileScreen = () => {
   const navigation = useNavigation(); // Use the hook to get navigation
   const [profileName, setProfileName] = useState('اسم المستخدم');
   const [profileImage, setProfileImage] = useState('https://via.placeholder.com/150');
   const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState([]);
+  const [activeRole, setActiveRole] = useState('client');
 
   const predefinedImages = [
     'https://i.pravatar.cc/150?img=6',
@@ -32,9 +36,42 @@ const ProfileScreen = () => {
     setLogoutModalVisible(true);
   };
 
-  const handleLogout = () => {
-    setLogoutModalVisible(false);
-    navigation.navigate('Login'); // Ensure 'Login' is the correct route name
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      // Token ve kullanıcı bilgilerini temizle
+      await AsyncStorage.multiRemove([
+        'token',
+        'userId',
+        'activeRole',
+        'availableRoles'
+      ]);
+      setLogoutModalVisible(false);
+      navigation.replace('Auth');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const switchRole = async () => {
+    try {
+      const availableRoles = JSON.parse(await AsyncStorage.getItem('availableRoles'));
+      const currentRole = await AsyncStorage.getItem('activeRole');
+      
+      if (availableRoles.includes('seller')) {
+        const newRole = currentRole === 'client' ? 'seller' : 'client';
+        await AsyncStorage.setItem('activeRole', newRole);
+        
+        // Yeni role göre yönlendirme
+        if (newRole === 'seller') {
+          navigation.replace('SellerMain');
+        } else {
+          navigation.replace('ClientMain');
+        }
+      }
+    } catch (error) {
+      console.error('Role switch error:', error);
+    }
   };
 
   return (
@@ -111,6 +148,14 @@ const ProfileScreen = () => {
           </View>
         </View>
       </Modal>
+
+      {availableRoles.includes('seller') && (
+        <TouchableOpacity style={styles.switchButton} onPress={switchRole}>
+          <Text style={styles.switchButtonText}>
+            {activeRole === 'client' ? 'التبديل إلى حساب البائع' : 'التبديل إلى حساب المستخدم'}
+          </Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 };
@@ -273,6 +318,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  switchButton: {
+    backgroundColor: '#3d4785',
+    padding: 15,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  switchButtonText: {
     color: '#fff',
     fontSize: 16,
   },

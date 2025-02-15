@@ -1,23 +1,24 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 
-const CustomAlert = ({ visible, message, onClose }) => {
+const CustomAlert = ({ visible, message, onClose, children }) => {
   return (
     <Modal
       transparent={true}
-      animationType="fade"
       visible={visible}
       onRequestClose={onClose}
+      animationType="fade"
     >
       <View style={styles.overlay}>
-        <View style={styles.alertBox}>
+        <View style={styles.alertContainer}>
           {typeof message === 'string' ? (
             <Text style={styles.message}>{message}</Text>
           ) : (
             message
           )}
+          {children}
           <TouchableOpacity style={styles.button} onPress={onClose}>
-            <Text style={styles.buttonText}>موافق</Text>
+            <Text style={styles.buttonText}>حسناً</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -28,22 +29,22 @@ const CustomAlert = ({ visible, message, onClose }) => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
-  alertBox: {
-    width: 300,
+  alertContainer: {
+    backgroundColor: 'white',
+    borderRadius: 20,
     padding: 20,
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    width: '80%',
     alignItems: 'center',
   },
   message: {
     fontSize: 16,
-    color: '#333',
-    marginBottom: 20,
     textAlign: 'center',
+    marginBottom: 20,
+    color: '#333',
   },
   button: {
     backgroundColor: '#3d4785',
@@ -53,7 +54,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   buttonText: {
-    color: '#fff',
+    color: 'white',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });
