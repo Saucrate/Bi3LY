@@ -19,6 +19,7 @@ import SellersControlScreen from './components/SellersControlScreen'; // Import 
 import ChangeProfileScreen from './components/ChangeProfileScreen'; // Import the ChangeProfileScreen
 import AdminProfileScreen from './components/AdminProfileScreen'; // Import the AdminProfileScreen
 import StoreScreen from './components/StoreScreen';
+import SearchScreen from './components/SearchScreen';
 
 const Stack = createStackNavigator();
 
@@ -56,6 +57,18 @@ const App = () => {
             headerTitleStyle: {
               fontWeight: 'bold',
             },
+          }} 
+        />
+        <Stack.Screen 
+          name="Search" 
+          component={SearchScreen} 
+          options={{ 
+            title: 'البحث',
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#3d4785',
+            },
+            headerTintColor: '#fff',
           }} 
         />
       </Stack.Navigator>

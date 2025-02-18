@@ -231,7 +231,7 @@ exports.getCategories = asyncHandler(async (req, res, next) => {
   console.log('=== Get Categories Request ===');
   
   try {
-    const categories = await Category.find({ level: 0 })
+    const categories = await Category.find({ parent: null })
       .select('name image subCategories')
       .populate('subCategories', 'name image');
     
@@ -481,13 +481,233 @@ exports.getCategoryProducts = asyncHandler(async (req, res, next) => {
     .sort(sortOptions)
     .populate('store', 'name')
     .populate('brand', 'name')
-    .populate('categories', 'name')
-    .populate('subcategories', 'name');
+    .populate('categories', 'name image description')
+    .populate('subcategories', 'name image description');
 
-  console.log(`Found ${products.length} products`);
+  console.log('=== Detailed Product Debug ===');
+  console.log('Raw Product Data:', JSON.stringify(products[0], null, 2));
+  console.log('Populated Fields Check:');
+  if (products.length > 0) {
+    const sampleProduct = products[0];
+    console.log('Store:', sampleProduct.store);
+    console.log('Brand:', sampleProduct.brand);
+    console.log('Categories:', sampleProduct.categories);
+    console.log('Subcategories Raw:', JSON.stringify(sampleProduct.subcategories, null, 2));
+    
+    // Alt kategori resimlerini kontrol et
+    console.log('=== Subcategory Image Check ===');
+    sampleProduct.subcategories.forEach(sub => {
+      console.log(`Subcategory ${sub.name}:`, {
+        id: sub._id,
+        hasImage: !!sub.image,
+        imageUrl: sub.image || 'No image'
+      });
+    });
+  }
+  console.log('=== End Detailed Product Debug ===');
+
+  console.log('Products with subcategories:', products.map(p => ({
+    id: p._id,
+    name: p.name,
+    subcategories: p.subcategories?.map(sub => ({
+      id: sub._id,
+      name: sub.name,
+      hasImage: !!sub.image,
+      imageUrl: sub.image,
+      description: sub.description
+    }))
+  })));
+
+  console.log(`Found ${products.length} products with detailed subcategory info`);
+  console.log('=== Query Debug Info ===');
+  console.log('Category ID:', categoryId);
+  console.log('Sort Options:', sortOptions);
+  console.log('Query Filters:', query);
+  console.log('=== End Query Debug Info ===');
 
   res.status(200).json({
     success: true,
     data: products
   });
+});
+
+// @desc    Search products
+// @route   GET /api/home/search/products
+// @access  Public
+exports.searchProducts = asyncHandler(async (req, res, next) => {
+  console.log('=== Search Products Request ===');
+  const { 
+    search,
+    category,
+    brands,
+    tags,
+    subcategories,
+    sortBy = 'newest',
+    minPrice,
+    maxPrice,
+    rating,
+    inStock,
+    limit = 20,
+    skip = 0
+  } = req.query;
+
+  console.log('Search Parameters:', {
+    search,
+    category,
+    brands,
+    tags,
+    subcategories,
+    sortBy,
+    minPrice,
+    maxPrice,
+    rating,
+    inStock,
+    limit,
+    skip
+  });
+
+  // Ana sorgu oluştur
+  let query = { status: 'approved' };
+
+  // Arama filtresi - geliştirilmiş arama mantığı
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    query.$or = [
+      { name: searchRegex },
+      { description: searchRegex },
+      { 'brand.name': searchRegex },
+      { 'categories.name': searchRegex },
+      { 'subcategories.name': searchRegex },
+      { 'tags.name': searchRegex }
+    ];
+  }
+
+  // Kategori filtresi
+  if (category) {
+    query.categories = category;
+  }
+
+  // Alt kategori filtresi
+  if (subcategories && subcategories.length > 0) {
+    const subcatIds = Array.isArray(subcategories) ? subcategories : [subcategories];
+    query.subcategories = { $in: subcatIds };
+  }
+
+  // Marka filtresi
+  if (brands && brands.length > 0) {
+    const brandIds = Array.isArray(brands) ? brands : [brands];
+    query.brand = { $in: brandIds };
+  }
+
+  // Etiket filtresi
+  if (tags && tags.length > 0) {
+    const tagIds = Array.isArray(tags) ? tags : [tags];
+    query.tags = { $in: tagIds };
+  }
+
+  // Fiyat filtresi
+  if (minPrice || maxPrice) {
+    query.price = {};
+    if (minPrice) query.price.$gte = Number(minPrice);
+    if (maxPrice) query.price.$lte = Number(maxPrice);
+  }
+
+  // Puan filtresi
+  if (rating) {
+    query.rating = { $gte: Number(rating) };
+  }
+
+  // Stok filtresi
+  if (inStock === 'true') {
+    query.countInStock = { $gt: 0 };
+  }
+
+  console.log('Final Query:', JSON.stringify(query, null, 2));
+
+  // Sıralama seçenekleri
+  let sortOptions = {};
+  switch (sortBy) {
+    case 'priceAsc':
+      sortOptions.price = 1;
+      break;
+    case 'priceDesc':
+      sortOptions.price = -1;
+      break;
+    case 'newest':
+      sortOptions.createdAt = -1;
+      break;
+    case 'rating':
+      sortOptions.rating = -1;
+      break;
+    case 'popular':
+      sortOptions.numReviews = -1;
+      sortOptions.rating = -1;
+      break;
+    default:
+      sortOptions.createdAt = -1;
+  }
+
+  try {
+    // Toplam ürün sayısını al
+    const total = await Product.countDocuments(query);
+
+    // Ana ürünleri getir
+    const products = await Product.find(query)
+      .sort(sortOptions)
+      .skip(Number(skip))
+      .limit(Number(limit))
+      .select('name price discountPrice images rating numReviews store brand categories subcategories tags countInStock description')
+      .populate('store', 'name')
+      .populate('brand', 'name')
+      .populate('categories', 'name')
+      .populate('subcategories', 'name')
+      .populate('tags', 'name');
+
+    // Benzer ürünleri bul
+    let similarProducts = [];
+    if (products.length > 0) {
+      const firstProduct = products[0];
+      const similarQuery = {
+        status: 'approved',
+        _id: { $ne: firstProduct._id },
+        $or: [
+          { categories: { $in: firstProduct.categories } },
+          { subcategories: { $in: firstProduct.subcategories } },
+          { brand: firstProduct.brand },
+          { tags: { $in: firstProduct.tags } }
+        ]
+      };
+
+      similarProducts = await Product.find(similarQuery)
+        .sort({ rating: -1 })
+        .limit(10)
+        .select('name price discountPrice images rating numReviews store brand')
+        .populate('store', 'name')
+        .populate('brand', 'name');
+    }
+
+    // Kullanıcı giriş yapmışsa arama geçmişini kaydet
+    if (req.user && search) {
+      await userActivityService.trackSearch(req.user._id, search);
+    }
+
+    console.log(`Found ${products.length} products out of ${total} total`);
+    console.log(`Found ${similarProducts.length} similar products`);
+    console.log('=== End Search Products ===');
+
+    res.status(200).json({
+      success: true,
+      data: products,
+      similarProducts,
+      pagination: {
+        total,
+        page: Math.floor(skip / limit) + 1,
+        pages: Math.ceil(total / limit),
+        hasMore: skip + products.length < total
+      }
+    });
+  } catch (error) {
+    console.error('Search products error:', error);
+    return next(new ErrorResponse('Error searching products', 500));
+  }
 }); 

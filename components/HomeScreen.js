@@ -19,8 +19,9 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Modal from 'react-native-modal';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { AntDesign } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { homeService } from '../services/homeService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomAlert from './CustomAlert';
@@ -30,6 +31,7 @@ import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { SharedElement } from 'react-navigation-shared-element';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { clientService } from '../services/clientService';
 
 const { width } = Dimensions.get('window');
 
@@ -45,6 +47,7 @@ const HomeScreen = () => {
   const [showAuthAlert, setShowAuthAlert] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
   const [homeData, setHomeData] = useState({
     categories: { main: [], sub: [] },
     personalized: {
@@ -111,9 +114,27 @@ const HomeScreen = () => {
     }
   };
 
+  const loadUserProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (token) {
+        const response = await clientService.getProfile();
+        if (response.success) {
+          setUserProfile(response.data);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  };
+
   useEffect(() => {
     loadHomeData();
-    const unsubscribe = navigation.addListener('focus', loadHomeData);
+    loadUserProfile();
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadHomeData();
+      loadUserProfile();
+    });
     return unsubscribe;
   }, [navigation]);
 
@@ -233,10 +254,10 @@ const HomeScreen = () => {
       console.log('Toggle favorite response:', response);
       
       if (response.success) {
-        setFavorites((prevFavorites) => ({
-          ...prevFavorites,
-          [productId]: !prevFavorites[productId],
-        }));
+    setFavorites((prevFavorites) => ({
+      ...prevFavorites,
+      [productId]: !prevFavorites[productId],
+    }));
       }
     } catch (error) {
       console.error('Error toggling favorite:', error);
@@ -296,79 +317,202 @@ const HomeScreen = () => {
     });
   };
 
-  const renderCategoryItem = ({ item, index }) => (
-    <TouchableOpacity 
-      key={`category-${item._id}`}
-      style={styles.categoryItem}
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      navigation.navigate('Search', { initialQuery: searchQuery });
+      setSearchQuery('');
+    }
+  };
+
+  const renderHeader = () => (
+    <View style={styles.headerContainer}>
+      <LinearGradient
+        colors={['#3d4785', '#5c6ac4']}
+        style={styles.headerGradient}
+      >
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            style={styles.avatarContainer}
+            onPress={() => navigation.navigate('Profile')}
+          >
+            <Image 
+              source={
+                userProfile?.avatar
+                  ? { uri: userProfile.avatar }
+                  : require('../assets/placeholder.jpeg')
+              }
+              style={styles.avatar}
+            />
+          </TouchableOpacity>
+          <View style={styles.welcomeContainer}>
+            <Text style={styles.welcomeText}>يوم جيد للتسوق</Text>
+            <Text style={styles.userName}>{userProfile?.name || 'زائر'}</Text>
+          </View>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={() => navigation.navigate('Notifications')}
+            >
+              <Ionicons name="notifications-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={() => navigation.navigate('Messages')}
+            >
+              <Ionicons name="mail-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="البحث في المتجر"
+              placeholderTextColor="#666"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearch}
+              returnKeyType="search"
+            />
+            <TouchableOpacity onPress={handleSearch}>
+              <Ionicons name="search" size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </LinearGradient>
+    </View>
+  );
+
+  const renderMainCategory = ({ item }) => (
+    <TouchableOpacity
+      style={styles.mainCategoryItem}
       onPress={() => handleCategoryPress(item)}
     >
-      <Image 
-        source={{ uri: item.image }} 
-        style={styles.categoryImage}
-        defaultSource={require('../assets/placeholder.jpeg')}
-      />
+      <View style={styles.categoryIconContainer}>
+        <Image
+          source={{ uri: item.image }}
+          style={styles.categoryIcon}
+          defaultSource={require('../assets/placeholder.jpeg')}
+        />
+      </View>
       <Text style={styles.categoryName}>{item.name}</Text>
+        </TouchableOpacity>
+  );
+
+  const renderSubCategory = ({ item }) => (
+    <TouchableOpacity
+      style={styles.subCategoryItem}
+      onPress={() => handleCategoryPress(item)}
+    >
+      <LinearGradient
+        colors={['rgba(255,255,255,0.9)', '#ffffff']}
+        style={styles.subCategoryGradient}
+      >
+        <Image
+          source={{ uri: item.image }}
+          style={styles.subCategoryImage}
+          defaultSource={require('../assets/placeholder.jpeg')}
+        />
+        <View style={styles.subCategoryContent}>
+          <Text style={styles.subCategoryName}>{item.name}</Text>
+          <Text style={styles.parentCategoryName}>{item.parent?.name}</Text>
+      </View>
+      </LinearGradient>
     </TouchableOpacity>
   );
 
-  const renderStoreItem = ({ item, index }) => (
-    <TouchableOpacity 
-      key={`store-${item._id}`}
+  const renderStoreItem = ({ item }) => (
+    <TouchableOpacity
       style={styles.storeCard}
       onPress={() => handleStorePress(item)}
     >
-      <Image 
-        source={{ uri: item.banner || item.logo }} 
-        style={styles.storeImage}
+      <Image
+        source={{ uri: item.banner }}
+        style={styles.storeBanner}
         defaultSource={require('../assets/placeholder.jpeg')}
       />
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.7)']}
+        style={styles.storeBannerGradient}
+      >
       <View style={styles.storeInfo}>
+          <View style={styles.storeLogoContainer}>
+            <Image
+              source={{ uri: item.logo }}
+              style={styles.storeLogo}
+              defaultSource={require('../assets/placeholder.jpeg')}
+            />
+          </View>
+          <View style={styles.storeDetails}>
         <Text style={styles.storeName}>{item.name}</Text>
-        <View style={styles.ratingContainer}>
-          {renderStars(item.rating)}
-          <Text style={styles.ratingText}>({item.rating?.toFixed(1) || '0.0'})</Text>
+            <View style={styles.storeStats}>
+              <Text style={styles.storeFollowers}>{item.followers?.length || 0} متابع</Text>
+              <View style={styles.ratingContainer}>
+                <Ionicons name="star" size={16} color="#FFD700" />
+                <Text style={styles.ratingText}>{item.rating?.toFixed(1) || '0.0'}</Text>
         </View>
       </View>
+          </View>
+        </View>
+      </LinearGradient>
     </TouchableOpacity>
   );
 
-  const renderProductItem = ({ item, index }) => (
+  const renderProductItem = ({ item }) => (
     <TouchableOpacity
       style={styles.productCard}
       onPress={() => handleProductPress(item)}
+      activeOpacity={0.9}
     >
       <SharedElement id={`product.${item._id}.image`}>
-        <View style={styles.imageContainer}>
+        <View style={styles.productImageContainer}>
           <Image
             source={{ uri: item.images[0] }}
             style={styles.productImage}
             defaultSource={require('../assets/placeholder.jpeg')}
           />
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.3)']}
-            style={styles.gradient}
+            colors={['transparent', 'rgba(0,0,0,0.7)']}
+            style={styles.productGradient}
           />
-          <BlurView intensity={80} style={styles.priceTag}>
+          <BlurView intensity={80} tint="dark" style={styles.priceTag}>
             <Text style={styles.priceText}>
-              {item.discountPrice ? item.discountPrice : item.price} أوقية
+              {item.discountPrice ? (
+                <>
+                  <Text style={styles.discountPrice}>{item.discountPrice}</Text>
+                  <Text style={styles.originalPrice}> {item.price}</Text>
+                </>
+              ) : (
+                item.price
+              )} أوقية
             </Text>
           </BlurView>
-        </View>
+          {item.inCart && (
+            <BlurView intensity={80} tint="dark" style={styles.cartBadge}>
+              <Text style={styles.cartBadgeText}>{item.cartQuantity}x</Text>
+            </BlurView>
+          )}
+      </View>
       </SharedElement>
+
       <View style={styles.productInfo}>
         <Text style={styles.productName} numberOfLines={2}>
           {item.name}
         </Text>
+        <View style={styles.productDetails}>
         <View style={styles.ratingContainer}>
           {renderStars(item.rating)}
-          <Text style={styles.reviewCount}>({item.numReviews})</Text>
+            <Text style={styles.reviewCount}>({item.numReviews})</Text>
+        </View>
+          <Text style={styles.storeNameText}>{item.store?.name}</Text>
         </View>
       </View>
+
       <TouchableOpacity
-        style={styles.favoriteButton}
+        style={[styles.favoriteButton, item.isFavorite && styles.favoriteButtonActive]}
         onPress={() => toggleFavorite(item._id)}
       >
-        <BlurView intensity={80} style={styles.iconBackground}>
+        <BlurView intensity={80} tint="light" style={styles.iconBackground}>
           <AntDesign
             name={item.isFavorite ? "heart" : "hearto"}
             size={20}
@@ -376,92 +520,70 @@ const HomeScreen = () => {
           />
         </BlurView>
       </TouchableOpacity>
+
       <TouchableOpacity
-        style={styles.cartButton}
+        style={[styles.cartButton, item.inCart && styles.cartButtonActive]}
         onPress={() => handleAddToCart(item)}
       >
-        <BlurView intensity={80} style={styles.iconBackground}>
-          <Ionicons name="cart-outline" size={20} color="#666" />
+        <BlurView intensity={80} tint="light" style={styles.iconBackground}>
+          <Ionicons 
+            name={item.inCart ? "cart" : "cart-outline"} 
+            size={20} 
+            color={item.inCart ? "#3d4785" : "#666"} 
+          />
         </BlurView>
       </TouchableOpacity>
     </TouchableOpacity>
   );
 
-  const renderRemiseProduct = ({ item }) => {
-    const discount = calculateDiscount(item.price, item.discountPrice);
-    return (
-      <TouchableOpacity 
-        style={[styles.remiseCard, { transform: [{ scaleX: -1 }] }]}
-        onPress={() => {
-          trackActivity('product', item._id);
-          navigation.navigate('ProductDetailScreen', { 
-            productId: item._id,
-            product: item 
-          });
-        }}
-      >
-        <FlatList
-          data={item.images || []}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(_, index) => index.toString()}
-          ListEmptyComponent={() => (
-            <Image
-              source={{ uri: 'https://via.placeholder.com/150' }}
-              style={styles.remiseProductImage}
-              defaultSource={require('../assets/placeholder.jpeg')}
-            />
-          )}
-          renderItem={({ item: imageUrl }) => (
-            <Image
-              source={{ uri: imageUrl }}
-              style={styles.remiseProductImage}
-              defaultSource={require('../assets/placeholder.jpeg')}
-            />
-          )}
+  const renderRemiseProduct = ({ item }) => (
+    <TouchableOpacity
+      style={styles.remiseProductCard}
+      onPress={() => handleProductPress(item)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.remiseImageContainer}>
+        <Image
+          source={{ uri: item.images[0] }}
+          style={styles.remiseProductImage}
+          defaultSource={require('../assets/placeholder.jpeg')}
         />
-        <View style={styles.remiseCardContent}>
-          <Text style={styles.remiseProductName} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <View style={styles.ratingContainer}>
-            {renderStars(item.rating)}
-            <Text style={styles.ratingText}>({item.numReviews})</Text>
-          </View>
-          <View style={styles.priceContainer}>
-            <Text style={styles.discountPrice}>
-              {item.discountPrice} MRU
+        <LinearGradient
+          colors={['rgba(0,0,0,0.7)', 'transparent']}
+          style={styles.remiseGradient}
+        >
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountText}>
+              {calculateDiscount(item.price, item.discountPrice)}% تخفيض
             </Text>
-            <Text style={styles.originalPrice}>
-              {item.price} MRU
-            </Text>
-            <View style={styles.discountBadge}>
-              <Text style={styles.discountText}>-{discount}%</Text>
-            </View>
-          </View>
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={styles.favoriteButton}
-              onPress={() => toggleFavorite(item._id)}
-            >
-              <AntDesign 
-                name={favorites[item._id] ? "heart" : "hearto"} 
-                size={20} 
-                color={favorites[item._id] ? "#FF6B6B" : "#666"}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.cartButton}
-              onPress={() => handleAddToCart(item)}
-            >
-              <Icon name="cart-outline" size={20} color="#666" />
-            </TouchableOpacity>
-          </View>
+      </View>
+        </LinearGradient>
         </View>
-      </TouchableOpacity>
-    );
-  };
+      <View style={styles.remiseProductInfo}>
+        <Text style={styles.remiseProductName} numberOfLines={2}>
+          {item.name}
+        </Text>
+        <View style={styles.remiseStoreInfo}>
+          <Text style={styles.remiseStoreName} numberOfLines={1}>
+            {item.store?.name}
+          </Text>
+          <View style={styles.remiseRating}>
+            <AntDesign name="star" size={12} color="#FFD700" />
+            <Text style={styles.remiseRatingText}>{item.rating?.toFixed(1)}</Text>
+            <Text style={styles.remiseReviewCount}>({item.numReviews})</Text>
+      </View>
+      </View>
+        <View style={styles.remisePriceContainer}>
+          <Text style={styles.remiseDiscountPrice}>
+            {item.discountPrice} أوقية
+          </Text>
+          <Text style={styles.remiseOriginalPrice}>
+            {item.price} أوقية
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 
   const renderBrandGridItem = ({ item }) => (
     <TouchableOpacity
@@ -526,7 +648,7 @@ const HomeScreen = () => {
   };
 
   if (loading && !refreshing) {
-    return (
+  return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3d4785" />
@@ -551,25 +673,18 @@ const HomeScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="البحث عن المنتجات"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
+      {renderHeader()}
       <FlatList
         data={[{ key: 'main' }]}
         keyExtractor={(item, index) => `main-content-${index}`}
         renderItem={() => (
           <>
-            {/* Personalized Section */}
-            {renderPersonalizedSection()}
-
             <TouchableOpacity style={styles.bannerContainer} onPress={() => Linking.openURL('#sellers')}>
               <Image source={{ uri: 'https://i.postimg.cc/t403yfn9/home2.jpg' }} style={styles.bannerImage} />
             </TouchableOpacity>
+
+            {/* Personalized Section */}
+            {renderPersonalizedSection()}
 
             {/* Main Categories */}
             <View style={styles.mainCategoriesContainer}>
@@ -581,14 +696,17 @@ const HomeScreen = () => {
                     style={styles.mainCategoryItem}
                     onPress={() => handleCategoryPress(category)}
                   >
-                    <View style={styles.mainCategoryImageContainer}>
+                    <LinearGradient
+                      colors={['#f8f9ff', '#ffffff']}
+                      style={styles.mainCategoryGradient}
+                    >
                       <Image
                         source={{ uri: category.image }}
                         style={styles.mainCategoryImage}
                         defaultSource={require('../assets/placeholder.jpeg')}
                       />
-                    </View>
-                    <Text style={styles.mainCategoryName}>{category.name}</Text>
+                      <Text style={styles.mainCategoryName}>{category.name}</Text>
+                    </LinearGradient>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -597,16 +715,20 @@ const HomeScreen = () => {
             {/* Special Stores */}
             {homeData.specialStores.length > 0 && (
               <View>
-                <View style={styles.titleContainer}>
-                  <Text style={styles.sectionTitle}>المتاجر المميزة</Text>
-                </View>
-                <View style={styles.storeList}>
+            <View style={styles.titleContainer}>
+              <Text style={styles.sectionTitle}>المتاجر المميزة</Text>
+            </View>
+                <ScrollView 
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.storeList}
+                >
                   {homeData.specialStores.map((store) => (
                     <View key={`store-${store._id}`}>
                       {renderStoreItem({ item: store })}
                     </View>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             )}
 
@@ -620,13 +742,20 @@ const HomeScreen = () => {
                     style={styles.subCategoryItem}
                     onPress={() => handleCategoryPress(category)}
                   >
-                    <Image
-                      source={{ uri: category.image }}
-                      style={styles.subCategoryImage}
-                      defaultSource={require('../assets/placeholder.jpeg')}
-                    />
-                    <Text style={styles.subCategoryName}>{category.name}</Text>
-                    <Text style={styles.parentCategoryName}>{category.parent?.name}</Text>
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0.9)', '#ffffff']}
+                      style={styles.subCategoryGradient}
+                    >
+                      <Image
+                        source={{ uri: category.image }}
+                        style={styles.subCategoryImage}
+                        defaultSource={require('../assets/placeholder.jpeg')}
+                      />
+                      <View style={styles.subCategoryContent}>
+                        <Text style={styles.subCategoryName}>{category.name}</Text>
+                        <Text style={styles.parentCategoryName}>{category.parent?.name}</Text>
+                      </View>
+                    </LinearGradient>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -635,9 +764,9 @@ const HomeScreen = () => {
             {/* Recently Viewed Products */}
             {homeData.personalized.recentlyViewed.length > 0 && (
               <View>
-                <View style={styles.titleContainer}>
+            <View style={styles.titleContainer}>
                   <Text style={styles.sectionTitle}>المنتجات المشاهدة مؤخراً</Text>
-                </View>
+            </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
                   {homeData.personalized.recentlyViewed.map((product) => (
                     <View key={`recent-${product._id}`}>
@@ -651,9 +780,9 @@ const HomeScreen = () => {
             {/* Recommended Products */}
             {homeData.personalized.recommended?.length > 0 && (
               <View>
-                <View style={styles.titleContainer}>
+            <View style={styles.titleContainer}>
                   <Text style={styles.sectionTitle}>منتجات موصى بها لك</Text>
-                </View>
+            </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
                   {homeData.personalized.recommended.map((product) => (
                     <View key={`recommended-${product._id}`}>
@@ -667,9 +796,9 @@ const HomeScreen = () => {
             {/* Trending Products */}
             {homeData.personalized.trendingInInterests.length > 0 && (
               <View>
-                <View style={styles.titleContainer}>
+            <View style={styles.titleContainer}>
                   <Text style={styles.sectionTitle}>المنتجات الرائجة في مجال اهتمامك</Text>
-                </View>
+            </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
                   {homeData.personalized.trendingInInterests.map((product) => (
                     <View key={`trending-${product._id}`}>
@@ -683,9 +812,9 @@ const HomeScreen = () => {
             {/* Special Products */}
             {homeData.specialProducts.length > 0 && (
               <View>
-                <View style={styles.titleContainer}>
+            <View style={styles.titleContainer}>
                   <Text style={styles.sectionTitle}>منتجات مميزة</Text>
-                </View>
+            </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
                   {homeData.specialProducts.map((product) => (
                     <View key={`special-${product._id}`}>
@@ -699,9 +828,9 @@ const HomeScreen = () => {
             {/* Discounted Products */}
             {homeData.discountedProducts.length > 0 && (
               <View>
-                <View style={styles.titleContainer}>
+            <View style={styles.titleContainer}>
                   <Text style={styles.sectionTitle}>منتجات مخفضة</Text>
-                </View>
+            </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
                   {homeData.discountedProducts.map((product) => (
                     <View key={`discount-${product._id}`}>
@@ -715,9 +844,9 @@ const HomeScreen = () => {
             {/* Similar Products */}
             {homeData.personalized.similarProducts.length > 0 && (
               <View>
-                <View style={styles.titleContainer}>
+            <View style={styles.titleContainer}>
                   <Text style={styles.sectionTitle}>منتجات مشابهة</Text>
-                </View>
+            </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
                   {homeData.personalized.similarProducts.map((product) => (
                     <View key={`similar-${product._id}`}>
@@ -731,9 +860,9 @@ const HomeScreen = () => {
             {/* Most Sold Stores */}
             {homeData.mostSoldStores.length > 0 && (
               <View>
-                <View style={styles.titleContainer}>
+            <View style={styles.titleContainer}>
                   <Text style={styles.sectionTitle}>المتاجر الأكثر مبيعاً</Text>
-                </View>
+            </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storeList}>
                   {homeData.mostSoldStores.map((store) => (
                     <View key={`store-${store._id}`}>
@@ -747,9 +876,9 @@ const HomeScreen = () => {
             {/* Most Sold Products */}
             {homeData.mostSoldProducts.length > 0 && (
               <View>
-                <View style={styles.titleContainer}>
+            <View style={styles.titleContainer}>
                   <Text style={styles.sectionTitle}>المنتجات الأكثر مبيعاً</Text>
-                </View>
+            </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productList}>
                   {homeData.mostSoldProducts.map((product) => (
                     <View key={`most-sold-${product._id}`}>
@@ -779,9 +908,9 @@ const HomeScreen = () => {
             {/* All Brands */}
             {homeData.brands.length > 0 && (
               <View>
-                <View style={styles.titleContainer}>
-                  <Text style={styles.sectionTitle}>جميع العلامات التجارية</Text>
-                </View>
+            <View style={styles.titleContainer}>
+              <Text style={styles.sectionTitle}>جميع العلامات التجارية</Text>
+            </View>
                 <View style={styles.brandGrid}>
                   {homeData.brands.map((brand) => (
                     <View key={`brand-${brand._id}`}>
@@ -820,15 +949,15 @@ const HomeScreen = () => {
               <Text style={styles.modalProductDescription}>{selectedProduct.category}</Text>
               <View style={styles.quantityContainer}>
                 <TouchableOpacity onPress={() => setQuantity(Math.max(1, quantity - 1))}>
-                  <Icon name="remove-circle-outline" size={30} color="#ff6347" />
+                  <Ionicons name="remove-circle-outline" size={30} color="#ff6347" />
                 </TouchableOpacity>
                 <Text style={styles.quantityText}>{quantity}</Text>
                 <TouchableOpacity onPress={() => setQuantity(quantity + 1)}>
-                  <Icon name="add-circle-outline" size={30} color="#1E90FF" />
+                  <Ionicons name="add-circle-outline" size={30} color="#1E90FF" />
                 </TouchableOpacity>
               </View>
               <TouchableOpacity style={styles.addToCartButton} onPress={() => handleAddToCart(selectedProduct)}>
-                <Icon name="cart-outline" size={20} color="#fff" />
+                <Ionicons name="cart-outline" size={20} color="#fff" />
                 <Text style={styles.addToCartText}>إضافة إلى السلة</Text>
               </TouchableOpacity>
             </>
@@ -856,37 +985,121 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  headerContainer: {
+    height: 160,
+    marginBottom: 10,
+  },
+  headerGradient: {
+    flex: 1,
+    paddingTop: 35,
+    paddingHorizontal: 15,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  avatarContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+  },
+  welcomeContainer: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  welcomeText: {
+    color: '#fff',
+    fontSize: 14,
+    opacity: 0.9,
+  },
+  userName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  headerIcons: {
+    flexDirection: 'row',
+  },
+  iconButton: {
+    marginLeft: 15,
+  },
   searchContainer: {
-    backgroundColor: '#fff',
-    padding: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   searchInput: {
-    backgroundColor: '#f5f5f5',
-    height: 40,
-    paddingHorizontal: 10,
-    borderRadius: 5,
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    flex: 1,
     fontSize: 14,
+    marginRight: 10,
+    textAlign: 'right',
+    color: '#666',
   },
-  bannerContainer: {
-    marginBottom: 10,
-    borderRadius: 10,
-    overflow: 'hidden',
-    elevation: 3,
+  categoryTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 10,
+    marginBottom: 5,
+    textAlign: 'right',
+  },
+  mainCategoryItem: {
+    alignItems: 'center',
+    marginHorizontal: 8,
+    width: 70,
+  },
+  categoryIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  categoryIcon: {
+    width: 30,
+    height: 30,
+    resizeMode: 'contain',
+  },
+  categoryName: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  bannerContainer: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   bannerImage: {
     width: '100%',
-    height: 200,
+    height: 180,
     resizeMode: 'cover',
   },
   titleContainer: {
@@ -906,85 +1119,86 @@ const styles = StyleSheet.create({
   categoryList: {
     marginBottom: 12,
   },
-  categoryItem: {
-    width: 80,
-    marginLeft: 8,
-    alignItems: 'center',
+  storeList: {
+    marginVertical: 8,
+    marginHorizontal: 0,
+    paddingHorizontal: 8,
   },
-  categoryImageContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  storeCard: {
+    width: width * 0.75,
+    height: 140,
+    marginHorizontal: 8,
+    borderRadius: 15,
     overflow: 'hidden',
-    marginBottom: 4,
     backgroundColor: '#fff',
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  categoryImage: {
+  storeBanner: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
+    position: 'absolute',
   },
-  categoryText: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#333',
-    marginTop: 5,
-    writingDirection: 'rtl',
-  },
-  storeList: {
-    marginBottom: 20,
-  },
-  storeCard: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 15,
-    margin: 8,
-    width: width * 0.35,
-    alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-  },
-  storeLogo: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 10,
+  storeBannerGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '100%',
+    justifyContent: 'flex-end',
+    padding: 10,
   },
   storeInfo: {
-    alignItems: 'center',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  storeLogoContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 10,
+    borderWidth: 2,
+    borderColor: '#fff',
+    overflow: 'hidden',
+  },
+  storeLogo: {
     width: '100%',
+    height: '100%',
+  },
+  storeDetails: {
+    flex: 1,
   },
   storeName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 4,
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
   },
   storeStats: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  statItem: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginLeft: 15,
-  },
-  statText: {
+  storeFollowers: {
+    color: '#fff',
     fontSize: 12,
-    color: '#666',
-    marginRight: 4,
+    marginRight: 10,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingText: {
+    color: '#fff',
+    fontSize: 12,
+    marginLeft: 5,
   },
   productList: {
-    marginBottom: 20,
+    marginVertical: 8,
+    marginHorizontal: 0,
+    paddingHorizontal: 8,
   },
   card: {
     backgroundColor: '#fff',
@@ -1001,99 +1215,95 @@ const styles = StyleSheet.create({
   },
   productCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 15,
     margin: 8,
-    width: width * 0.42,
+    width: width * 0.6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 5,
     overflow: 'hidden',
+  },
+  productImageContainer: {
+    width: '100%',
+    height: width * 0.6,
+    position: 'relative',
   },
   productImage: {
     width: '100%',
-    height: width * 0.42,
+    height: '100%',
     resizeMode: 'cover',
   },
-  cardContent: {
-    flex: 1,
-    alignItems: 'flex-end',
+  productGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '100%',
+  },
+  productInfo: {
+    padding: 12,
   },
   productName: {
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 6,
-    textAlign: 'right',
+    marginBottom: 8,
+    textAlign: 'left',
   },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
+  productDetails: {
+    gap: 4,
   },
-  price: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#3d4785',
-  },
-  discountPrice: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ff4444',
-  },
-  originalPrice: {
-    fontSize: 12,
-    color: '#999',
-    textDecorationLine: 'line-through',
-    marginLeft: 8,
-  },
-  discountBadge: {
-    backgroundColor: '#FF0000',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 6,
-  },
-  discountText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  ratingText: {
+  reviewCount: {
     fontSize: 12,
     color: '#666',
     marginLeft: 4,
   },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    marginTop: 8,
+  storeNameText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'left',
+  },
+  priceTag: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    overflow: 'hidden',
+  },
+  priceText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  discountPrice: {
+    color: '#ff4444',
+  },
+  originalPrice: {
+    color: '#fff',
+    fontSize: 12,
+    textDecorationLine: 'line-through',
+    marginLeft: 4,
   },
   favoriteButton: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 20,
-    padding: 8,
     zIndex: 1,
   },
   cartButton: {
     position: 'absolute',
     top: 8,
     left: 8,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    zIndex: 1,
+  },
+  iconBackground: {
     borderRadius: 20,
     padding: 8,
-    zIndex: 1,
+    overflow: 'hidden',
   },
   remiseCard: {
     backgroundColor: '#fff',
@@ -1245,7 +1455,6 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
   },
-  // Yeni kategori grid stilleri
   categoryGrid: {
     padding: 5,
     marginBottom: 15,
@@ -1343,60 +1552,27 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     overflow: 'hidden',
   },
-  categoryName: {
-    fontSize: 12,
-    color: '#333',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  subCategoryCard: {
-    flex: 1,
-    margin: 5,
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    maxWidth: width / 3 - 10,
-  },
   mainCategoriesContainer: {
-    marginVertical: 10,
-    paddingHorizontal: 10,
+    marginVertical: 8,
+    marginHorizontal: 0,
   },
   mainCategoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-  },
-  mainCategoryItem: {
-    width: width / 4 - 15,
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  mainCategoryImageContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#fff',
     justifyContent: 'center',
+    paddingVertical: 5,
+    gap: 8,
+  },
+  mainCategoryGradient: {
+    padding: 10,
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    marginBottom: 6,
-    overflow: 'hidden',
+    borderRadius: 15,
   },
   mainCategoryImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginBottom: 5,
   },
   mainCategoryName: {
     fontSize: 12,
@@ -1405,47 +1581,51 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   subCategoriesContainer: {
-    marginVertical: 10,
+    marginTop: 8,
+    marginBottom: 10,
     paddingHorizontal: 10,
     backgroundColor: '#f8f8f8',
-    paddingVertical: 15,
+    paddingVertical: 10,
   },
   subCategoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
+    justifyContent: 'center',
+    paddingVertical: 5,
+    gap: 8,
   },
   subCategoryItem: {
-    width: width / 3 - 15,
-    backgroundColor: '#fff',
+    width: width / 3 - 12,
+    marginHorizontal: 4,
+    marginBottom: 8,
     borderRadius: 12,
-    padding: 10,
-    marginBottom: 15,
+    overflow: 'hidden',
     elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+  },
+  subCategoryGradient: {
+    padding: 8,
+    borderRadius: 12,
   },
   subCategoryImage: {
     width: '100%',
-    height: 100,
+    height: 90,
     borderRadius: 8,
-    marginBottom: 8,
-    resizeMode: 'cover',
+    marginBottom: 6,
+  },
+  subCategoryContent: {
+    padding: 5,
   },
   subCategoryName: {
     fontSize: 13,
-    textAlign: 'center',
     color: '#333',
+    textAlign: 'center',
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   parentCategoryName: {
     fontSize: 11,
-    textAlign: 'center',
     color: '#666',
+    textAlign: 'center',
   },
   personalizedSection: {
     margin: 15,
@@ -1487,6 +1667,117 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#3d4785',
     textAlign: 'right',
+  },
+  remiseProductCard: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    marginHorizontal: 8,
+    width: width * 0.6,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    overflow: 'hidden',
+  },
+  remiseImageContainer: {
+    width: '100%',
+    height: 180,
+    position: 'relative',
+  },
+  remiseGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '100%',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    padding: 10,
+  },
+  discountBadge: {
+    backgroundColor: '#ff4757',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  discountText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  remiseProductInfo: {
+    padding: 12,
+  },
+  remiseProductName: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+    textAlign: 'right',
+  },
+  remiseStoreInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  remiseStoreName: {
+    fontSize: 12,
+    color: '#666',
+    flex: 1,
+    textAlign: 'right',
+  },
+  remiseRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  remiseRatingText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
+  },
+  remiseReviewCount: {
+    fontSize: 11,
+    color: '#999',
+    marginLeft: 4,
+  },
+  remisePriceContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  remiseDiscountPrice: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#3d4785',
+    marginLeft: 8,
+  },
+  remiseOriginalPrice: {
+    fontSize: 13,
+    color: '#999',
+    textDecorationLine: 'line-through',
+  },
+  favoriteButtonActive: {
+    backgroundColor: 'rgba(255, 68, 68, 0.1)',
+  },
+  cartButtonActive: {
+    backgroundColor: 'rgba(61, 71, 133, 0.1)',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 40,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    overflow: 'hidden',
+  },
+  cartBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
 

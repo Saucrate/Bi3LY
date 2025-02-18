@@ -156,7 +156,7 @@ const FavoritesScreen = () => {
           <Text style={styles.addToCartText}>أضف إلى السلة</Text>
         </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
   );
 
   const renderSimilarProduct = ({ item }) => (

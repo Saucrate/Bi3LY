@@ -11,7 +11,8 @@ const {
   getDiscountedProducts,
   getMostSoldStores,
   getMostSoldProducts,
-  getBrands
+  getBrands,
+  searchProducts
 } = require('../controllers/HomeController');
 const { protect } = require('../middleware/auth');
 
@@ -40,5 +41,8 @@ router.get('/discounted-products', getDiscountedProducts);
 router.get('/most-sold-stores', getMostSoldStores);
 router.get('/most-sold-products', getMostSoldProducts);
 router.get('/brands', getBrands);
+
+// Ürün arama endpoint'i
+router.get('/search/products', searchProducts);
 
 module.exports = router; 

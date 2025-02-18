@@ -98,7 +98,8 @@ exports.getStores = asyncHandler(async (req, res) => {
 // @access  Public
 exports.getStore = asyncHandler(async (req, res) => {
   const store = await Store.findById(req.params.id)
-    .populate('owner', 'name email');
+    .populate('owner', 'name email')
+    .populate('followers');
 
   if (!store) {
     return res.status(404).json({
@@ -110,20 +111,33 @@ exports.getStore = asyncHandler(async (req, res) => {
   // Get total products count
   const productsCount = await Product.countDocuments({ store: store._id });
 
-  // Get followers count
-  const followersCount = store.followers.length;
+  // Get followers array and count
+  const followersArray = store.followers || [];
+  const followersCount = followersArray.length;
 
   // Check if current user follows the store
   let isFollowing = false;
   if (req.user) {
-    isFollowing = store.followers.includes(req.user._id);
+    isFollowing = followersArray.some(
+      follower => follower._id.toString() === req.user._id.toString()
+    );
+    
+    // Eğer followers array'i ObjectId'lerden oluşuyorsa direkt kontrol et
+    if (!isFollowing) {
+      isFollowing = store.followers.includes(req.user._id);
+    }
   }
+
+  console.log('User ID:', req.user?._id);
+  console.log('Followers:', followersArray);
+  console.log('Is Following:', isFollowing);
 
   // Create response object with additional data
   const storeData = {
     ...store.toObject(),
     totalProducts: productsCount,
-    followers: followersCount,
+    followers: followersArray,
+    followerCount: followersCount,
     isFollowing
   };
 
@@ -245,10 +259,25 @@ exports.followStore = asyncHandler(async (req, res) => {
 
   await store.save();
 
+  // Get updated store data with populated followers
+  const updatedStore = await Store.findById(req.params.id)
+    .populate('followers');
+
+  // Calculate updated stats
+  const followersArray = updatedStore.followers || [];
+  const followersCount = followersArray.length;
+  const newIsFollowing = followersArray.some(
+    follower => follower._id.toString() === req.user._id.toString()
+  );
+
   res.json({
     success: true,
-    isFollowing: !isFollowing,
-    message: isFollowing ? 'Store unfollowed successfully' : 'Store followed successfully'
+    data: {
+      isFollowing: newIsFollowing,
+      followerCount: followersCount,
+      followers: followersArray
+    },
+    message: newIsFollowing ? 'Store followed successfully' : 'Store unfollowed successfully'
   });
 });
 

@@ -27,11 +27,17 @@ const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const sellerRoutes = require('./routes/seller');
 const homeRoutes = require('./routes/home');
+const clientRoutes = require('./routes/clientRoutes');
+const profileRoutes = require('./routes/profileRoutes');
+const addressRoutes = require('./routes/addressRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/seller', sellerRoutes);
 app.use('/api/home', homeRoutes);
+app.use('/api/client', clientRoutes);
+app.use('/api/profile', profileRoutes);
+app.use('/api/addresses', addressRoutes);
 app.use('/api/users', require('./routes/users'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/stores', require('./routes/stores'));

@@ -223,13 +223,13 @@ const CartScreen = () => {
           )}
         </View>
 
-        <View style={styles.quantityContainer}>
+          <View style={styles.quantityContainer}>
           <TouchableOpacity 
             style={styles.quantityButton}
             onPress={() => updateCartItem(item.product?._id, Math.max(1, item.quantity - 1))}
           >
             <AntDesign name="minus" size={16} color="#3d4785" />
-          </TouchableOpacity>
+            </TouchableOpacity>
           <View style={styles.quantityBox}>
             <Text style={styles.quantity}>{item.quantity}</Text>
           </View>
@@ -238,7 +238,7 @@ const CartScreen = () => {
             onPress={() => updateCartItem(item.product?._id, item.quantity + 1)}
           >
             <AntDesign name="plus" size={16} color="#3d4785" />
-          </TouchableOpacity>
+            </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -315,11 +315,11 @@ const CartScreen = () => {
         </View>
       ) : (
         <>
-          <FlatList
-            data={cartItems}
-            renderItem={renderCartItem}
+      <FlatList
+        data={cartItems}
+        renderItem={renderCartItem}
             keyExtractor={(item) => item._id}
-            contentContainerStyle={styles.cartList}
+        contentContainerStyle={styles.cartList}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <AntDesign name="shoppingcart" size={64} color="#ccc" />
@@ -348,8 +348,8 @@ const CartScreen = () => {
           />
           
           {cartItems.length > 0 && (
-            <View style={styles.summaryContainer}>
-              <View style={styles.couponContainer}>
+      <View style={styles.summaryContainer}>
+        <View style={styles.couponContainer}>
                 <TextInput
                   style={styles.couponInput}
                   placeholder="أدخل رمز القسيمة"
@@ -361,23 +361,23 @@ const CartScreen = () => {
                   onPress={applyCoupon}
                 >
                   <Text style={styles.applyCouponText}>تطبيق</Text>
-                </TouchableOpacity>
-              </View>
+            </TouchableOpacity>
+          </View>
               
-              <View style={styles.totalContainer}>
-                <View style={styles.totalRow}>
+        <View style={styles.totalContainer}>
+          <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>المجموع الفرعي:</Text>
                   <Text style={styles.totalValue}>
                     {calculateSubtotal().toFixed(2)} MRU
                   </Text>
-                </View>
-                <View style={styles.totalRow}>
+          </View>
+          <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>المجموع الكلي:</Text>
                   <Text style={styles.grandTotal}>
                     {calculateTotal().toFixed(2)} MRU
                   </Text>
                 </View>
-              </View>
+          </View>
               
               <TouchableOpacity 
                 style={styles.checkoutButton}
@@ -390,9 +390,9 @@ const CartScreen = () => {
                   <Text style={styles.checkoutTotalText}>
                     {calculateTotal().toFixed(2)} MRU
                   </Text>
-                </View>
+          </View>
               </TouchableOpacity>
-            </View>
+          </View>
           )}
         </>
       )}

@@ -1,6 +1,8 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config';
+import { favoriteService } from './favoriteService';
+import { cartService } from './cartService';
 
 // API URL tanımı
 const HOME_API_URL = `${API_URL}/api/home`;
@@ -41,15 +43,54 @@ class HomeService {
       const token = await AsyncStorage.getItem('token');
       console.log('Token Status:', token ? 'Present' : 'Not Present');
       
+      // Favori ve sepet verilerini al
+      let favorites = [];
+      let cartItems = [];
+      
+      try {
+        const [favoritesResponse, cartResponse] = await Promise.all([
+          favoriteService.getFavorites(),
+          cartService.getCart()
+        ]);
+        
+        favorites = favoritesResponse.success ? favoritesResponse.data : [];
+        cartItems = cartResponse.success ? cartResponse.data.items : [];
+      } catch (error) {
+        console.error('Error fetching favorites/cart:', error);
+      }
+      
       const response = await api.get('/');
       console.log('Response Status:', response.status);
-      console.log('Data Structure:', {
-        success: response.data.success,
-        categories: response.data.data?.categories || {},
-        personalized: response.data.data?.personalized || {}
-      });
-      console.log('=== End Home Data Request ===');
       
+      // Ürünlere favori ve sepet durumlarını ekle
+      if (response.data.success) {
+        const processProducts = (products) => {
+          return products.map(product => ({
+            ...product,
+            isFavorite: favorites.some(fav => (fav._id || fav.id) === product._id),
+            inCart: cartItems.some(item => 
+              (item.product._id || item.product) === product._id
+            ),
+            cartQuantity: cartItems.find(item => 
+              (item.product._id || item.product) === product._id
+            )?.quantity || 0
+          }));
+        };
+
+        // Tüm ürün listelerini güncelle
+        if (response.data.data.personalized) {
+          response.data.data.personalized.recentlyViewed = processProducts(response.data.data.personalized.recentlyViewed || []);
+          response.data.data.personalized.recommended = processProducts(response.data.data.personalized.recommended || []);
+          response.data.data.personalized.similarProducts = processProducts(response.data.data.personalized.similarProducts || []);
+          response.data.data.personalized.trendingInInterests = processProducts(response.data.data.personalized.trendingInInterests || []);
+        }
+
+        response.data.data.specialProducts = processProducts(response.data.data.specialProducts || []);
+        response.data.data.discountedProducts = processProducts(response.data.data.discountedProducts || []);
+        response.data.data.mostSoldProducts = processProducts(response.data.data.mostSoldProducts || []);
+      }
+      
+      console.log('=== End Home Data Request ===');
       return response.data;
     } catch (error) {
       console.error('Home Data Error:', error);
@@ -198,6 +239,44 @@ class HomeService {
       return response.data;
     } catch (error) {
       console.error('Get category details error:', error);
+      throw error;
+    }
+  }
+
+  // Ürünleri ara
+  async searchProducts(options = {}) {
+    try {
+      console.log('Searching products with options:', options);
+      const queryParams = new URLSearchParams();
+
+      // Temel arama parametreleri
+      if (options.sortBy) queryParams.append('sortBy', options.sortBy);
+      if (options.category) queryParams.append('category', options.category);
+      if (options.priceRange) {
+        queryParams.append('minPrice', options.priceRange.min);
+        queryParams.append('maxPrice', options.priceRange.max);
+      }
+      if (options.inStock) queryParams.append('inStock', true);
+      if (options.search) queryParams.append('search', options.search);
+      if (options.limit) queryParams.append('limit', options.limit);
+      if (options.skip) queryParams.append('skip', options.skip);
+      
+      // Yeni arama parametreleri
+      if (options.brands && options.brands.length > 0) {
+        options.brands.forEach(brand => queryParams.append('brands[]', brand));
+      }
+      if (options.tags && options.tags.length > 0) {
+        options.tags.forEach(tag => queryParams.append('tags[]', tag));
+      }
+      if (options.subcategories && options.subcategories.length > 0) {
+        options.subcategories.forEach(subcat => queryParams.append('subcategories[]', subcat));
+      }
+      if (options.rating) queryParams.append('rating', options.rating);
+
+      const response = await api.get(`/search/products?${queryParams}`);
+      return response.data;
+    } catch (error) {
+      console.error('Search products error:', error);
       throw error;
     }
   }

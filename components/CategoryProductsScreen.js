@@ -63,20 +63,82 @@ const CategoryProductsScreen = () => {
 
   const loadFilterOptions = async () => {
     try {
+      console.log('=== Load Filter Options Start ===');
+      console.log('Category:', {
+        id: category._id,
+        name: category.name,
+        hasImage: !!category.image,
+        imageUrl: category.image
+      });
+
       const response = await homeService.getCategoryProducts(category._id);
+      console.log('API Response:', {
+        success: response.success,
+        productCount: response.data?.length || 0
+      });
+
       if (response.success) {
         const products = response.data;
         
+        console.log('=== Product Data Analysis ===');
+        if (products.length > 0) {
+          const sampleProduct = products[0];
+          console.log('Sample Product Structure:', {
+            id: sampleProduct._id,
+            name: sampleProduct.name,
+            subcategoriesType: typeof sampleProduct.subcategories,
+            isArray: Array.isArray(sampleProduct.subcategories),
+            subcategoriesLength: sampleProduct.subcategories?.length,
+            firstSubcategory: sampleProduct.subcategories?.[0]
+          });
+        }
+        
         // Benzersiz alt kategorileri çıkar
         const uniqueSubcategories = products
-          .flatMap(p => p.subcategories || [])
-          .filter(sub => sub && sub._id && sub.name)
+          .flatMap(p => {
+            console.log('Processing product subcategories:', {
+              productId: p._id,
+              subcategories: p.subcategories
+            });
+            return p.subcategories || [];
+          })
+          .filter(sub => {
+            const isValid = sub && sub._id && sub.name;
+            if (!isValid) {
+              console.log('Filtered out invalid subcategory:', sub);
+            }
+            return isValid;
+          })
           .reduce((unique, sub) => {
             if (!unique.some(item => item._id === sub._id)) {
-              unique.push(sub);
+              console.log('Processing subcategory:', {
+                id: sub._id,
+                name: sub.name,
+                image: sub.image,
+                hasImage: !!sub.image,
+                description: sub.description
+              });
+              unique.push({
+                _id: sub._id,
+                name: sub.name,
+                image: sub.image,
+                description: sub.description
+              });
             }
             return unique;
           }, []);
+
+        console.log('=== Subcategories Debug ===');
+        console.log('Total Products:', products.length);
+        console.log('Unique Subcategories:', uniqueSubcategories.length);
+        console.log('Subcategories Detail:', uniqueSubcategories.map(sub => ({
+          id: sub._id,
+          name: sub.name,
+          hasImage: !!sub.image,
+          imageUrl: sub.image,
+          description: sub.description
+        })));
+        console.log('=== End Subcategories Debug ===');
         
         // Benzersiz markaları çıkar
         const uniqueBrands = products
@@ -230,7 +292,7 @@ const CategoryProductsScreen = () => {
   };
 
   const renderProduct = ({ item }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.card}
       onPress={() => handleProductPress(item)}
     >
@@ -266,28 +328,29 @@ const CategoryProductsScreen = () => {
     </TouchableOpacity>
   );
 
-  const renderSubcategory = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.subcategoryCard,
-        selectedSubcategory?._id === item._id && styles.selectedSubcategoryCard
-      ]}
-      onPress={() => setSelectedSubcategory(selectedSubcategory?._id === item._id ? null : item)}
-    >
-      <Image
-        source={{ uri: item.image }}
-        style={styles.subcategoryImage}
-        defaultSource={require('../assets/placeholder.jpeg')}
-        resizeMode="cover"
-      />
-      <Text style={[
-        styles.subcategoryText,
-        selectedSubcategory?._id === item._id && styles.selectedSubcategoryText
-      ]}>
-        {item.name}
-      </Text>
-    </TouchableOpacity>
-  );
+  const renderSubcategory = ({ item }) => {
+    console.log('Rendering subcategory:', {
+      id: item._id,
+      name: item.name
+    });
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.subcategoryChip,
+          selectedSubcategory?._id === item._id && styles.selectedSubcategoryChip
+        ]}
+        onPress={() => setSelectedSubcategory(selectedSubcategory?._id === item._id ? null : item)}
+      >
+        <Text style={[
+          styles.subcategoryChipText,
+          selectedSubcategory?._id === item._id && styles.selectedSubcategoryChipText
+        ]}>
+          {item.name}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   const renderFilterChip = ({ item, isSelected, onPress, style }) => (
     <TouchableOpacity
@@ -380,7 +443,7 @@ const CategoryProductsScreen = () => {
         <Text style={styles.headerTitle}>{category.name}</Text>
         <TouchableOpacity onPress={() => setShowSortModal(true)} style={styles.sortButton}>
           <AntDesign name="bars" size={24} color="#333" />
-        </TouchableOpacity>
+      </TouchableOpacity>
       </View>
 
       <TextInput
@@ -394,12 +457,12 @@ const CategoryProductsScreen = () => {
       <View style={styles.filtersContainer}>
         {/* Alt kategoriler */}
         {subcategories.length > 0 && (
-          <FlatList
+      <FlatList
             horizontal
-            data={subcategories}
-            renderItem={renderSubcategory}
+        data={subcategories}
+        renderItem={renderSubcategory}
             keyExtractor={item => item._id.toString()}
-            showsHorizontalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
             style={styles.subcategoriesList}
           />
         )}
@@ -645,29 +708,24 @@ const styles = StyleSheet.create({
   subcategoriesList: {
     paddingHorizontal: 10,
   },
-  subcategoryCard: {
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  selectedSubcategoryCard: {
-    opacity: 0.7,
-  },
-  subcategoryImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: '#3d4785',
+  subcategoryChip: {
     backgroundColor: '#f0f0f0',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 10,
+    marginBottom: 5,
   },
-  subcategoryText: {
-    fontSize: 12,
+  selectedSubcategoryChip: {
+    backgroundColor: '#3d4785',
+  },
+  subcategoryChipText: {
+    fontSize: 14,
     color: '#666',
-    marginTop: 5,
     textAlign: 'center',
   },
-  selectedSubcategoryText: {
-    color: '#3d4785',
+  selectedSubcategoryChipText: {
+    color: '#fff',
     fontWeight: 'bold',
   },
   otherFiltersContainer: {

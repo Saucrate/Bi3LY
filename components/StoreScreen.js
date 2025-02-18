@@ -44,14 +44,23 @@ const StoreScreen = () => {
       setError(null);
 
       const storeResponse = await storeService.getStoreDetails(storeId);
+      console.log('Store Response:', storeResponse);
+      
       if (storeResponse.success) {
         setStore(storeResponse.data);
-        setIsFollowing(storeResponse.data.isFollowing);
+        
+        // Update follow status and follower count
+        const followStatus = storeResponse.data.isFollowing;
+        const followerCount = storeResponse.data.followerCount || 0;
+        
+        console.log('Initial Following:', followStatus, 'Initial Follower Count:', followerCount);
+        
+        setIsFollowing(followStatus);
         setStats({
           totalProducts: storeResponse.data.totalProducts || 0,
           totalSales: storeResponse.data.totalSales || 0,
           averageRating: storeResponse.data.rating || 0,
-          followers: storeResponse.data.followers || 0
+          followers: followerCount
         });
       }
 
@@ -70,11 +79,16 @@ const StoreScreen = () => {
   const handleFollowStore = async () => {
     try {
       const response = await storeService.toggleFollowStore(storeId);
+      console.log('Toggle Follow Response:', response);
+      
       if (response.success) {
-        setIsFollowing(!isFollowing);
+        const { isFollowing, followerCount } = response.data;
+        console.log('New Following Status:', isFollowing, 'New Follower Count:', followerCount);
+        
+        setIsFollowing(isFollowing);
         setStats(prev => ({
           ...prev,
-          followers: isFollowing ? prev.followers - 1 : prev.followers + 1
+          followers: followerCount
         }));
       }
     } catch (error) {
@@ -145,7 +159,7 @@ const StoreScreen = () => {
       })}
     >
       <Image 
-        source={{ uri: item.image }} 
+        source={{ uri: item.images[0] }} 
         style={styles.productImage}
         defaultSource={require('../assets/placeholder.jpeg')}
       />
