@@ -635,15 +635,42 @@ exports.updateStoreProfile = asyncHandler(async (req, res) => {
 // @route   GET /api/seller/orders
 // @access  Private/Seller
 exports.getOrders = asyncHandler(async (req, res) => {
-  const store = await Store.findOne({ owner: req.user.id });
-  const orders = await Order.find({ store: store._id })
-    .populate('user', 'name email')
-    .populate('products.product');
+  try {
+    // Önce satıcının mağazasını bul
+    const store = await Store.findOne({ owner: req.user._id });
+    
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        error: 'Store not found'
+      });
+    }
 
-  res.json({
+    // Mağazaya ait siparişleri bul
+    const orders = await Order.find({
+      'items.store': store._id
+    }).populate([
+      { path: 'user', select: 'name email phoneNumber' },
+      { 
+        path: 'items.product',
+        select: 'name images price discountPrice'
+      }
+    ]).sort({ createdAt: -1 });
+
+    console.log(`Found ${orders.length} orders for store ${store._id}`);
+
+    res.status(200).json({
     success: true,
+      count: orders.length,
     data: orders
   });
+  } catch (error) {
+    console.error('Error getting store orders:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error getting store orders'
+    });
+  }
 });
 
 // @desc    Update order status
@@ -1026,6 +1053,51 @@ exports.getProductDetail = asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Error getting product detail'
+    });
+  }
+});
+
+// @desc    Get seller orders
+// @route   GET /api/seller/orders
+// @access  Private/Seller
+exports.getSellerOrders = asyncHandler(async (req, res) => {
+  try {
+    // Önce satıcının mağazasını bul
+    const store = await Store.findOne({ owner: req.user._id });
+    
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        error: 'Store not found'
+      });
+    }
+
+    // Mağazaya ait siparişleri bul
+    const orders = await Order.find({
+      'items.store': store._id
+    }).populate([
+      { 
+        path: 'user', 
+        select: 'name email phoneNumber' 
+      },
+      { 
+        path: 'items.product',
+        select: 'name images price discountPrice'
+      }
+    ]).sort({ createdAt: -1 });
+
+    console.log(`Found ${orders.length} orders for store ${store._id}`);
+
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      data: orders
+    });
+  } catch (error) {
+    console.error('Error getting store orders:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error getting store orders'
     });
   }
 }); 

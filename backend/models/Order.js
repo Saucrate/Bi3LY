@@ -6,15 +6,15 @@ const orderSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  store: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Store',
-    required: true
-  },
-  products: [{
+  items: [{
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
+      required: true
+    },
+    store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Store',
       required: true
     },
     quantity: {
@@ -27,6 +27,43 @@ const orderSchema = new mongoose.Schema({
       required: true
     }
   }],
+  shippingAddress: {
+    title: String,
+    fullName: {
+      type: String,
+      required: true
+    },
+    phoneNumber: {
+      type: String,
+      required: true
+    },
+    wilaya: {
+      type: String,
+      required: true
+    },
+    moughataa: {
+      type: String,
+      required: true
+    },
+    street: {
+      type: String,
+      required: true
+    },
+    buildingNo: String,
+    apartmentNo: String,
+    additionalDirections: String
+  },
+  paymentMethod: {
+    type: String,
+    enum: ['cod', 'bankily'],
+    required: true
+  },
+  bankilyNumber: {
+    type: String,
+    required: function() {
+      return this.paymentMethod === 'bankily';
+    }
+  },
   totalAmount: {
     type: Number,
     required: true
@@ -36,26 +73,20 @@ const orderSchema = new mongoose.Schema({
     enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
     default: 'pending'
   },
-  shippingAddress: {
-    street: String,
-    city: String,
-    state: String,
-    postalCode: String,
-    country: String
-  },
-  paymentMethod: {
-    type: String,
-    required: true
-  },
-  paymentStatus: {
-    type: String,
-    enum: ['pending', 'completed', 'failed'],
-    default: 'pending'
-  },
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
+});
+
+// Middleware to update updatedAt before saving
+orderSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
+  next();
 });
 
 module.exports = mongoose.model('Order', orderSchema); 

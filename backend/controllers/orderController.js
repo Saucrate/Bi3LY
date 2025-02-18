@@ -1,150 +1,119 @@
+const asyncHandler = require('../middleware/async');
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 const Store = require('../models/Store');
-const asyncHandler = require('express-async-handler');
+const ErrorResponse = require('../utils/errorResponse');
 
 // @desc    Create new order
 // @route   POST /api/orders
-// @access  Private/Client
-exports.createOrder = asyncHandler(async (req, res) => {
-  const { shippingAddress, paymentMethod } = req.body;
+// @access  Private
+exports.createOrder = asyncHandler(async (req, res, next) => {
+  const { shippingAddress, paymentMethod, bankilyNumber } = req.body;
 
-  // Get user's cart
-  const cart = await Cart.findOne({ user: req.user._id }).populate('items.product');
-  if (!cart || cart.items.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'No items in cart'
+  // Get user's cart with product details
+  const cart = await Cart.findOne({ user: req.user._id })
+    .populate({
+      path: 'items.product',
+      select: 'name price discountPrice store',
+      populate: { path: 'store', select: 'name' }
     });
+
+  if (!cart || !cart.items || cart.items.length === 0) {
+    return next(new ErrorResponse('Cart is empty', 400));
   }
 
-  // Group items by store
-  const itemsByStore = {};
-  for (const item of cart.items) {
-    const product = item.product;
-    const store = await Store.findById(product.store);
+  // Calculate total and prepare order items
+  const orderItems = cart.items.map(item => ({
+    product: item.product._id,
+    store: item.product.store._id,
+    quantity: item.quantity,
+    price: item.product.discountPrice || item.product.price
+  }));
 
-    if (!itemsByStore[store._id]) {
-      itemsByStore[store._id] = {
-        store: store._id,
-        items: [],
-        totalAmount: 0
-      };
-    }
+  const totalAmount = orderItems.reduce((total, item) => 
+    total + (item.price * item.quantity), 0
+  );
 
-    // Check stock
-    if (product.quantity < item.quantity) {
-      return res.status(400).json({
-        success: false,
-        error: `Not enough stock for ${product.name}`
-      });
-    }
+  // Create order
+  const order = await Order.create({
+    user: req.user._id,
+    items: orderItems,
+    shippingAddress,
+    paymentMethod,
+    bankilyNumber,
+    totalAmount,
+    status: 'pending'
+  });
 
-    // Add item to store group
-    itemsByStore[store._id].items.push({
-      product: product._id,
-      quantity: item.quantity,
-      price: product.price
-    });
-    itemsByStore[store._id].totalAmount += product.price * item.quantity;
+  // Clear the cart after successful order creation
+  await Cart.findOneAndUpdate(
+    { user: req.user._id },
+    { $set: { items: [] } }
+  );
 
-    // Update product stock
-    product.quantity -= item.quantity;
-    await product.save();
-  }
-
-  // Create orders for each store
-  const orders = [];
-  for (const storeId in itemsByStore) {
-    const order = await Order.create({
-      user: req.user._id,
-      store: storeId,
-      products: itemsByStore[storeId].items,
-      totalAmount: itemsByStore[storeId].totalAmount,
-      shippingAddress,
-      paymentMethod
-    });
-    orders.push(order);
-  }
-
-  // Clear cart after successful order creation
-  cart.items = [];
-  cart.totalAmount = 0;
-  await cart.save();
+  // Populate order details for response
+  await order.populate([
+    { path: 'items.product', select: 'name images price discountPrice' },
+    { path: 'items.store', select: 'name' },
+    { path: 'user', select: 'name email' }
+  ]);
 
   res.status(201).json({
     success: true,
-    data: orders
+    data: order
   });
 });
 
-// @desc    Get all orders
+// @desc    Get user orders
 // @route   GET /api/orders
 // @access  Private
-exports.getOrders = asyncHandler(async (req, res) => {
-  let orders;
+exports.getUserOrders = asyncHandler(async (req, res) => {
+  const orders = await Order.find({ user: req.user._id })
+    .populate([
+      {
+        path: 'items.product',
+        select: 'name price discountPrice images'
+      },
+      {
+        path: 'user',
+        select: 'name email phone'
+      }
+    ])
+    .sort('-createdAt');
 
-  if (req.user.role === 'admin') {
-    // Admin can see all orders
-    orders = await Order.find()
-      .populate('user', 'name email')
-      .populate('store', 'name')
-      .populate('products.product', 'name price images');
-  } else if (req.user.role === 'seller') {
-    // Seller can see orders for their store
-    const store = await Store.findOne({ owner: req.user._id });
-    if (!store) {
-      return res.status(404).json({
-        success: false,
-        error: 'Store not found'
-      });
-    }
-    orders = await Order.find({ store: store._id })
-      .populate('user', 'name email')
-      .populate('products.product', 'name price images');
-  } else {
-    // Client can see their own orders
-    orders = await Order.find({ user: req.user._id })
-      .populate('store', 'name')
-      .populate('products.product', 'name price images');
-  }
-
-  res.json({
+  res.status(200).json({
     success: true,
     data: orders
   });
 });
 
-// @desc    Get single order
+// @desc    Get order by ID
 // @route   GET /api/orders/:id
 // @access  Private
-exports.getOrder = asyncHandler(async (req, res) => {
+exports.getOrderById = asyncHandler(async (req, res, next) => {
   const order = await Order.findById(req.params.id)
-    .populate('user', 'name email')
-    .populate('store', 'name')
-    .populate('products.product', 'name price images');
+    .populate([
+      {
+        path: 'items.product',
+        select: 'name price discountPrice images'
+      },
+      {
+        path: 'user',
+        select: 'name email phone'
+      }
+    ]);
 
   if (!order) {
-    return res.status(404).json({
-      success: false,
-      error: 'Order not found'
-    });
+    return next(new ErrorResponse('Order not found', 404));
   }
 
-  // Check authorization
-  if (
-    req.user.role !== 'admin' &&
-    (req.user.role === 'seller' && order.store.owner.toString() !== req.user._id.toString()) &&
-    (req.user.role === 'client' && order.user.toString() !== req.user._id.toString())
-  ) {
-    return res.status(403).json({
-      success: false,
-      error: 'Not authorized to view this order'
-    });
+  // Check if the order belongs to the user
+  if (order.user._id.toString() !== req.user._id.toString()) {
+    return next(new ErrorResponse('Not authorized to access this order', 401));
   }
 
-  res.json({
+  res.status(200).json({
     success: true,
     data: order
   });
@@ -152,31 +121,20 @@ exports.getOrder = asyncHandler(async (req, res) => {
 
 // @desc    Update order status
 // @route   PUT /api/orders/:id/status
-// @access  Private/Seller
-exports.updateOrderStatus = asyncHandler(async (req, res) => {
+// @access  Private/Admin
+exports.updateOrderStatus = asyncHandler(async (req, res, next) => {
   const { status } = req.body;
 
   const order = await Order.findById(req.params.id);
-  if (!order) {
-    return res.status(404).json({
-      success: false,
-      error: 'Order not found'
-    });
-  }
 
-  // Check if seller owns the store
-  const store = await Store.findById(order.store);
-  if (store.owner.toString() !== req.user._id.toString()) {
-    return res.status(403).json({
-      success: false,
-      error: 'Not authorized to update this order'
-    });
+  if (!order) {
+    return next(new ErrorResponse('Order not found', 404));
   }
 
   order.status = status;
   await order.save();
 
-  res.json({
+  res.status(200).json({
     success: true,
     data: order
   });
@@ -185,45 +143,27 @@ exports.updateOrderStatus = asyncHandler(async (req, res) => {
 // @desc    Cancel order
 // @route   PUT /api/orders/:id/cancel
 // @access  Private
-exports.cancelOrder = asyncHandler(async (req, res) => {
+exports.cancelOrder = asyncHandler(async (req, res, next) => {
   const order = await Order.findById(req.params.id);
+
   if (!order) {
-    return res.status(404).json({
-      success: false,
-      error: 'Order not found'
-    });
+    return next(new ErrorResponse('Order not found', 404));
   }
 
-  // Check authorization
-  if (
-    req.user.role !== 'admin' &&
-    order.user.toString() !== req.user._id.toString()
-  ) {
-    return res.status(403).json({
-      success: false,
-      error: 'Not authorized to cancel this order'
-    });
+  // Check if the order belongs to the user
+  if (order.user.toString() !== req.user._id.toString()) {
+    return next(new ErrorResponse('Not authorized to cancel this order', 401));
   }
 
-  // Only allow cancellation if order is pending
+  // Only allow cancellation of pending orders
   if (order.status !== 'pending') {
-    return res.status(400).json({
-      success: false,
-      error: 'Order cannot be cancelled'
-    });
-  }
-
-  // Restore product quantities
-  for (const item of order.products) {
-    const product = await Product.findById(item.product);
-    product.quantity += item.quantity;
-    await product.save();
+    return next(new ErrorResponse('Order cannot be cancelled at this stage', 400));
   }
 
   order.status = 'cancelled';
   await order.save();
 
-  res.json({
+  res.status(200).json({
     success: true,
     data: order
   });

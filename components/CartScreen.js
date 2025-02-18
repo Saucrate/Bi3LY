@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
-import { AntDesign, FontAwesome } from '@expo/vector-icons';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { AntDesign, FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,6 +17,7 @@ const CartScreen = () => {
   const [showAuthAlert, setShowAuthAlert] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [similarProducts, setSimilarProducts] = useState([]);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     checkAuthAndLoadCart();
@@ -59,6 +60,12 @@ const CartScreen = () => {
       console.log('loadCartFromDB - response:', response);
       if (response.success) {
         setCartItems(response.data.items || []);
+        // Toplam tutarı hesapla
+        const total = response.data.items.reduce((sum, item) => {
+          const price = item.product.discountPrice || item.product.price;
+          return sum + (price * item.quantity);
+        }, 0);
+        setTotal(total);
       }
     } catch (error) {
       console.error('Error loading cart from DB:', error);
@@ -73,6 +80,12 @@ const CartScreen = () => {
       console.log('loadCartFromLocal - local cart:', localCart);
       if (localCart) {
         setCartItems(JSON.parse(localCart));
+        // Toplam tutarı hesapla
+        const total = JSON.parse(localCart).reduce((sum, item) => {
+          const price = item.product.discountPrice || item.product.price;
+          return sum + (price * item.quantity);
+        }, 0);
+        setTotal(total);
       }
     } catch (error) {
       console.error('Error loading cart from local:', error);
@@ -89,49 +102,37 @@ const CartScreen = () => {
     navigation.navigate('Auth');
   };
 
-  const updateCartItem = async (id, quantity) => {
+  const handleQuantityChange = async (productId, newQuantity) => {
     try {
-      if (isAuthenticated) {
-        // Veritabanında güncelle
-        const response = await cartService.updateCartItem(id, quantity);
+      if (newQuantity < 1) {
+        // Ürünü sepetten kaldır
+        const response = await cartService.removeFromCart(productId);
         if (response.success) {
-          setCartItems(prevItems =>
-            prevItems.map(item =>
-              item._id === id ? { ...item, quantity } : item
-            )
-          );
+          await loadCartFromDB();
         }
       } else {
-        // Local storage'da güncelle
-        const updatedItems = cartItems.map(item =>
-          (item._id || item.id) === id ? { ...item, quantity } : item
-        );
-        setCartItems(updatedItems);
-        await AsyncStorage.setItem('cart', JSON.stringify(updatedItems));
+        console.log('Updating quantity for product:', productId, 'to:', newQuantity);
+        const response = await cartService.updateCartItem(productId, newQuantity);
+        console.log('Update response:', response);
+        if (response.success) {
+          await loadCartFromDB();
+        }
       }
     } catch (error) {
       console.error('Error updating cart item:', error);
-      setError('حدث خطأ في تحديث العنصر');
+      Alert.alert('خطأ', 'حدث خطأ في تحديث الكمية');
     }
   };
 
-  const removeItem = async (id) => {
+  const handleRemoveItem = async (productId) => {
     try {
-      if (isAuthenticated) {
-        // Veritabanından kaldır
-        const response = await cartService.removeFromCart(id);
-        if (response.success) {
-          setCartItems(prevItems => prevItems.filter(item => item._id !== id));
-        }
-      } else {
-        // Local storage'dan kaldır
-        const updatedItems = cartItems.filter(item => (item._id || item.id) !== id);
-        setCartItems(updatedItems);
-        await AsyncStorage.setItem('cart', JSON.stringify(updatedItems));
+      const response = await cartService.removeFromCart(productId);
+      if (response.success) {
+        await loadCartFromDB();
       }
     } catch (error) {
-      console.error('Error removing cart item:', error);
-      setError('حدث خطأ في إزالة العنصر');
+      console.error('Error removing item:', error);
+      Alert.alert('خطأ', 'حدث خطأ في إزالة المنتج');
     }
   };
 
@@ -154,6 +155,10 @@ const CartScreen = () => {
   };
 
   const handleCheckout = () => {
+    if (cartItems.length === 0) {
+      Alert.alert('تنبيه', 'السلة فارغة');
+      return;
+    }
     if (!isAuthenticated) {
       handleAuthRequired();
       return;
@@ -200,9 +205,9 @@ const CartScreen = () => {
           </Text>
           <TouchableOpacity 
             style={styles.removeButton}
-            onPress={() => removeItem(item.product?._id)}
+            onPress={() => handleRemoveItem(item.product?._id)}
           >
-            <AntDesign name="delete" size={20} color="#FF0000" />
+            <MaterialIcons name="delete" size={24} color="#ff6b6b" />
           </TouchableOpacity>
         </View>
         
@@ -226,18 +231,18 @@ const CartScreen = () => {
           <View style={styles.quantityContainer}>
           <TouchableOpacity 
             style={styles.quantityButton}
-            onPress={() => updateCartItem(item.product?._id, Math.max(1, item.quantity - 1))}
+            onPress={() => handleQuantityChange(item.product?._id, Math.max(1, item.quantity - 1))}
           >
-            <AntDesign name="minus" size={16} color="#3d4785" />
+            <Text style={styles.quantityButtonText}>-</Text>
             </TouchableOpacity>
           <View style={styles.quantityBox}>
             <Text style={styles.quantity}>{item.quantity}</Text>
           </View>
           <TouchableOpacity 
             style={styles.quantityButton}
-            onPress={() => updateCartItem(item.product?._id, item.quantity + 1)}
+            onPress={() => handleQuantityChange(item.product?._id, item.quantity + 1)}
           >
-            <AntDesign name="plus" size={16} color="#3d4785" />
+            <Text style={styles.quantityButtonText}>+</Text>
             </TouchableOpacity>
         </View>
       </View>
@@ -532,6 +537,10 @@ const styles = StyleSheet.create({
   quantity: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#333',
+  },
+  quantityButtonText: {
+    fontSize: 18,
     color: '#333',
   },
   similarSection: {

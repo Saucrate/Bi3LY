@@ -20,6 +20,7 @@ import ChangeProfileScreen from './components/ChangeProfileScreen'; // Import th
 import AdminProfileScreen from './components/AdminProfileScreen'; // Import the AdminProfileScreen
 import StoreScreen from './components/StoreScreen';
 import SearchScreen from './components/SearchScreen';
+import CheckoutScreen from './components/CheckoutScreen';
 
 const Stack = createStackNavigator();
 
@@ -44,6 +45,7 @@ const App = () => {
         <Stack.Screen name="SellersControl" component={SellersControlScreen} options={{ title: 'التحكم في البائعين' }} /> 
         <Stack.Screen name="ChangeProfileScreen" component={ChangeProfileScreen} options={{ title: 'تغيير الملف الشخصي' }} /> 
         <Stack.Screen name="AdminProfileScreen" component={AdminProfileScreen} />
+        <Stack.Screen name="Checkout" component={CheckoutScreen} />
         <Stack.Screen 
           name="Store" 
           component={StoreScreen} 

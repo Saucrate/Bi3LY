@@ -14,9 +14,11 @@ const SellerHomeScreen = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [orders, setOrders] = useState([]);
 
   useEffect(() => {
     loadStats();
+    loadOrders();
   }, []);
 
   const loadStats = async () => {
@@ -30,6 +32,18 @@ const SellerHomeScreen = () => {
       setError(err.response?.data?.error || 'حدث خطأ في تحميل الإحصائيات');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadOrders = async () => {
+    try {
+      const response = await sellerService.getOrders();
+      if (response.success) {
+        setOrders(response.data);
+        console.log('Orders loaded:', response.data);
+      }
+    } catch (err) {
+      console.error('Error loading orders:', err);
     }
   };
 
@@ -58,23 +72,32 @@ const SellerHomeScreen = () => {
         <Text style={styles.title}>مرحباً بك في لوحة التحكم الخاصة بالمتجر</Text>
         
         <View style={styles.statsContainer}>
-          <View style={styles.statBox}>
+          <TouchableOpacity 
+            style={styles.statBox}
+            onPress={() => navigation.navigate('Products')}
+          >
             <FontAwesome5 name="shopping-bag" size={24} color="#3d4785" />
             <Text style={styles.statNumber}>{stats.productsCount}</Text>
             <Text style={styles.statLabel}>المنتجات</Text>
-        </View>
+          </TouchableOpacity>
           
-          <View style={styles.statBox}>
+          <TouchableOpacity 
+            style={styles.statBox}
+            onPress={() => navigation.navigate('Orders')}
+          >
             <FontAwesome5 name="shopping-cart" size={24} color="#3d4785" />
-            <Text style={styles.statNumber}>{stats.ordersCount}</Text>
+            <Text style={styles.statNumber}>{orders.length}</Text>
             <Text style={styles.statLabel}>الطلبات</Text>
-      </View>
+          </TouchableOpacity>
           
-          <View style={styles.statBox}>
+          <TouchableOpacity 
+            style={styles.statBox}
+            onPress={() => navigation.navigate('Statistics')}
+          >
             <FontAwesome5 name="star" size={24} color="#3d4785" />
             <Text style={styles.statNumber}>{stats.ratingsCount}</Text>
             <Text style={styles.statLabel}>التقييمات</Text>
-      </View>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity 

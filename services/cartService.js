@@ -113,9 +113,9 @@ class CartService {
     }
   }
 
-  async updateCartItem(itemId, quantity) {
+  async updateCartItem(productId, quantity) {
     try {
-      console.log('updateCartItem - itemId:', itemId, 'quantity:', quantity);
+      console.log('updateCartItem - productId:', productId, 'quantity:', quantity);
       const token = await AsyncStorage.getItem('token');
       
       if (!token) {
@@ -124,14 +124,16 @@ class CartService {
         let cartItems = localCart ? JSON.parse(localCart) : [];
         
         cartItems = cartItems.map(item => 
-          item.product === itemId ? { ...item, quantity } : item
+          (item.product === productId || item.product._id === productId) 
+            ? { ...item, quantity } 
+            : item
         );
         
         await AsyncStorage.setItem('cart', JSON.stringify(cartItems));
         return { success: true, data: { items: cartItems } };
       }
 
-      const response = await this.api.put('/update', { itemId, quantity });
+      const response = await this.api.put('/update', { productId, quantity });
       console.log('updateCartItem - response:', response.data);
       
       if (response.data.success) {

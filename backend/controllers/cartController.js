@@ -82,32 +82,47 @@ exports.addToCart = asyncHandler(async (req, res) => {
 exports.updateQuantity = asyncHandler(async (req, res, next) => {
   const { productId, quantity } = req.body;
 
+  console.log('=== Update Cart Item Request ===');
+  console.log('Product ID:', productId);
+  console.log('New Quantity:', quantity);
+
   // Ürünün var olduğunu kontrol et
   const product = await Product.findById(productId);
   if (!product) {
+    console.log('Product not found');
     return next(new ErrorResponse('Product not found', 404));
   }
 
   // Stok kontrolü
   if (product.countInStock < quantity) {
+    console.log('Insufficient stock. Available:', product.countInStock, 'Requested:', quantity);
     return next(new ErrorResponse('Insufficient stock', 400));
   }
 
   let cart = await Cart.findOne({ user: req.user._id });
   if (!cart) {
-    return next(new ErrorResponse('Cart not found', 404));
+    console.log('Cart not found, creating new cart');
+    cart = await Cart.create({ 
+      user: req.user._id,
+      items: []
+    });
   }
 
   const itemIndex = cart.items.findIndex(
     item => item.product.toString() === productId
   );
 
+  console.log('Item index in cart:', itemIndex);
+
   if (itemIndex === -1) {
+    console.log('Item not found in cart');
     return next(new ErrorResponse('Item not found in cart', 404));
   }
 
+  // Miktarı güncelle
   cart.items[itemIndex].quantity = quantity;
   await cart.save();
+  console.log('Cart updated successfully');
 
   // Güncel sepeti getir
   cart = await Cart.findById(cart._id).populate({
@@ -118,6 +133,8 @@ exports.updateQuantity = asyncHandler(async (req, res, next) => {
       { path: 'brand', select: 'name' }
     ]
   });
+
+  console.log('=== End Update Cart Item ===');
 
   res.status(200).json({
     success: true,

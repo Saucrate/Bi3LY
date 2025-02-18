@@ -35,6 +35,7 @@ const clients = [
 const StatisticsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState({
     basicStats: {
       productsCount: 0,
@@ -67,6 +68,7 @@ const StatisticsScreen = () => {
 
   useEffect(() => {
     loadStats();
+    loadOrders();
   }, []);
 
   const loadStats = async () => {
@@ -80,6 +82,18 @@ const StatisticsScreen = () => {
       setError(err.response?.data?.error || 'حدث خطأ في تحميل الإحصائيات');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadOrders = async () => {
+    try {
+      const response = await sellerService.getOrders();
+      if (response.success) {
+        setOrders(response.data);
+        console.log('Orders loaded in StatisticsScreen:', response.data);
+      }
+    } catch (err) {
+      console.error('Error loading orders in StatisticsScreen:', err);
     }
   };
 
