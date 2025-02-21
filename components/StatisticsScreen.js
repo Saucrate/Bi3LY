@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
-import { LineChart, BarChart } from 'react-native-chart-kit';
+import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
-import { ProgressCircle } from 'react-native-svg-charts';
 import { sellerService } from '../services/sellerService';
+import GlobalSpinner from './GlobalSpinner';
 
 const screenWidth = Dimensions.get('window').width;
 
 const chartConfig = {
   backgroundGradientFrom: '#fff',
   backgroundGradientTo: '#fff',
-  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+  color: (opacity = 1) => `rgba(61, 71, 133, ${opacity})`,
   labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
   strokeWidth: 2, // optional, default 3
   barPercentage: 0.5,
@@ -233,12 +233,82 @@ const StatisticsScreen = () => {
     }
   };
 
+  const renderSalesChart = () => {
+    const data = {
+      labels: stats.monthlyStats.map(stat => stat.month.substring(0, 3)),
+      datasets: [{
+        data: stats.monthlyStats.map(stat => stat.sales)
+      }]
+    };
+
+    return (
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>المبيعات الشهرية</Text>
+        <LineChart
+          data={data}
+          width={screenWidth - 40}
+          height={220}
+          chartConfig={chartConfig}
+          bezier
+          style={styles.chart}
+        />
+      </View>
+    );
+  };
+
+  const renderProductsChart = () => {
+    const data = {
+      labels: stats.topProducts.map(product => product.name.substring(0, 10)),
+      datasets: [{
+        data: stats.topProducts.map(product => product.soldCount)
+      }]
+    };
+
+    return (
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>المنتجات الأكثر مبيعاً</Text>
+        <BarChart
+          data={data}
+          width={screenWidth - 40}
+          height={220}
+          chartConfig={chartConfig}
+          style={styles.chart}
+          verticalLabelRotation={30}
+        />
+      </View>
+    );
+  };
+
+  const renderCustomerDistribution = () => {
+    const data = stats.topCustomers.map((customer, index) => ({
+      name: customer.name,
+      population: customer.orderCount,
+      color: `rgba(61, 71, 133, ${1 - index * 0.2})`,
+      legendFontColor: '#7F7F7F',
+      legendFontSize: 12,
+    }));
+
+    return (
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>توزيع العملاء</Text>
+        <PieChart
+          data={data}
+          width={screenWidth - 40}
+          height={220}
+          chartConfig={chartConfig}
+          accessor="population"
+          backgroundColor="transparent"
+          paddingLeft="15"
+          style={styles.chart}
+        />
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3d4785" />
-        </View>
+        <GlobalSpinner />
       </SafeAreaView>
     );
   }
@@ -319,6 +389,10 @@ const StatisticsScreen = () => {
             style={styles.chart}
           />
         </View>
+
+        {renderSalesChart()}
+        {renderProductsChart()}
+        {renderCustomerDistribution()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -408,7 +482,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center'
-  }
+  },
+  chartContainer: {
+    backgroundColor: '#fff',
+    margin: 20,
+    padding: 15,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+    textAlign: 'right',
+  },
 });
 
 export default StatisticsScreen;

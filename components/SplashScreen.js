@@ -20,7 +20,7 @@ const SplashScreen = () => {
 
       try {
         console.log('Making profile request with token...');
-        const response = await axios.get('http://192.168.100.35:5000/api/users/profile', {
+        const response = await axios.get('http://192.168.100.219:5000/api/users/profile', {
           headers: { Authorization: `Bearer ${token}` }
         });
 

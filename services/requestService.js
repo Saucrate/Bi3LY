@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'http://192.168.100.35:5000/api/requests';
+const API_URL = 'http://192.168.100.219:5000/api/requests';
 
 // Axios instance oluştur
 const api = axios.create({
@@ -75,7 +75,7 @@ export const requestService = {
       console.log('Updating request status:', { id, status, reason });
       const token = await AsyncStorage.getItem('token');
       
-      const endpoint = `http://192.168.100.35:5000/api/admin/requests/${id}/status`;
+      const endpoint = `http://192.168.100.219:5000/api/admin/requests/${id}/status`;
       const requestBody = { 
         status,
         rejectReason: reason 

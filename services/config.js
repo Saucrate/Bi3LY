@@ -1,5 +1,5 @@
 // API URL tanımı - kendi IP adresinizle değiştirin
-export const API_URL = 'http://192.168.100.35:5000';
+export const API_URL = 'http://192.168.100.219:5000';
 
 // API endpoints
 export const API_ENDPOINTS = {
