@@ -9,55 +9,17 @@ const SplashScreen = () => {
 
   const checkAuthStatus = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      console.log('Token:', token);
+      // Always navigate to Welcome screen first
+      navigation.replace('Welcome');
+      return;
 
-      if (!token) {
-        console.log('No token found, redirecting to ClientMain');
-        navigation.replace('ClientMain');
-        return;
-      }
-
-      try {
-        console.log('Making profile request with token...');
-        const response = await axios.get('http://192.168.100.219:5000/api/users/profile', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        console.log('Profile response:', response.data);
-
-        if (response.data.success) {
-          const userRole = response.data.data.role;
-          console.log('User role from backend:', userRole);
-
-          await AsyncStorage.setItem('activeRole', userRole);
-
-          switch (userRole) {
-            case 'admin':
-              console.log('Redirecting to AdminMain');
-              navigation.replace('AdminMain');
-              break;
-            case 'seller':
-              console.log('Redirecting to SellerMain');
-              navigation.replace('SellerMain');
-              break;
-            default:
-              console.log('Redirecting to ClientMain');
-              navigation.replace('ClientMain');
-          }
-        } else {
-          console.log('Invalid response from server, redirecting to ClientMain');
-          await AsyncStorage.multiRemove(['token', 'activeRole']);
-          navigation.replace('ClientMain');
-        }
-      } catch (error) {
-        console.error('Profile request error:', error.response?.data || error.message);
-        await AsyncStorage.multiRemove(['token', 'activeRole']);
-        navigation.replace('ClientMain');
-      }
+      // Comment out or remove the rest of the auth logic for now
+      /* const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcome');
+      ... rest of the code ... */
+      
     } catch (error) {
       console.error('Auth check error:', error);
-      navigation.replace('ClientMain');
+      navigation.replace('Welcome');
     }
   };
 

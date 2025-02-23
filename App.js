@@ -22,6 +22,7 @@ import AdminProfileScreen from './components/AdminProfileScreen';
 import StoreScreen from './components/StoreScreen';
 import SearchScreen from './components/SearchScreen';
 import CheckoutScreen from './components/CheckoutScreen';
+import WelcomeScreen from './components/WelcomeScreen';
 
 const Stack = createStackNavigator();
 
@@ -31,6 +32,7 @@ const App = () => {
       <NavigationContainer>
         <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Auth" component={AuthTabs} />
           <Stack.Screen name="ClientMain" component={ClientTabs} />
           <Stack.Screen name="SellerMain" component={SellerTabs} />

@@ -1,13 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { SafeAreaView, View, Text, StyleSheet, Image, TouchableOpacity, FlatList, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
-import { AntDesign } from '@expo/vector-icons';
+import {
+  SafeAreaView, View, Text, StyleSheet, Image, TouchableOpacity, 
+  FlatList, Dimensions, ActivityIndicator, StatusBar, Platform
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { FontAwesome5 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { favoriteService } from '../services/favoriteService';
-import CustomAlert from './CustomAlert';
 import { homeService } from '../services/homeService';
+import CustomAlert from './CustomAlert';
+import * as Animatable from 'react-native-animatable';
+import { BlurView } from 'expo-blur';
+import MaskedView from '@react-native-masked-view/masked-view';
+import Animated, { 
+  useAnimatedStyle, 
+  withSpring,
+  interpolate,
+  useAnimatedScrollHandler,
+  useSharedValue
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
+
+const HEADER_MAX_HEIGHT = 150;
+const HEADER_MIN_HEIGHT = Platform.OS === 'ios' ? 90 : 70 + StatusBar.currentHeight;
 
 const FavoritesScreen = () => {
   const navigation = useNavigation();
@@ -17,6 +35,73 @@ const FavoritesScreen = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showAuthAlert, setShowAuthAlert] = useState(false);
   const [similarProducts, setSimilarProducts] = useState([]);
+  const insets = useSafeAreaInsets();
+  const scrollY = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const headerStyle = useAnimatedStyle(() => {
+    const height = interpolate(
+      scrollY.value,
+      [0, 100],
+      [HEADER_MAX_HEIGHT, HEADER_MIN_HEIGHT],
+      'clamp'
+    );
+
+    return {
+      height,
+    };
+  });
+
+  const headerContentStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      scrollY.value,
+      [50, 100],
+      [1, 0],
+      'clamp'
+    );
+
+    return {
+      opacity,
+      transform: [
+        {
+          translateY: interpolate(
+            scrollY.value,
+            [0, 100],
+            [0, -20],
+            'clamp'
+          ),
+        },
+      ],
+    };
+  });
+
+  const minimizedHeaderStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      scrollY.value,
+      [50, 100],
+      [0, 1],
+      'clamp'
+    );
+
+    return {
+      opacity,
+      transform: [
+        {
+          translateY: interpolate(
+            scrollY.value,
+            [0, 100],
+            [20, 0],
+            'clamp'
+          ),
+        },
+      ],
+    };
+  });
 
   useEffect(() => {
     checkAuthAndLoadFavorites();
@@ -121,42 +206,121 @@ const FavoritesScreen = () => {
   };
 
   const renderFavoriteItem = ({ item, index }) => (
-    <TouchableOpacity 
-      style={[styles.favoriteCard, index % 2 === 0 ? styles.leftCard : styles.rightCard]}
-      onPress={() => handleBuyNow(item)}
+    <Animatable.View
+      animation="fadeInUp"
+      delay={index * 100}
+      style={styles.favoriteCard}
     >
-      <Image 
-        source={{ uri: item.images?.[0] || item.image }} 
-        style={styles.favoriteImage}
-        defaultSource={require('../assets/placeholder.jpeg')}
-      />
-      <TouchableOpacity 
-        style={styles.heartButton}
-        onPress={() => removeFavorite(item._id || item.id)}
-      >
-        <AntDesign name="heart" size={20} color="#FF0000" />
-      </TouchableOpacity>
-      <View style={styles.favoriteDetails}>
-        <Text style={styles.favoriteName} numberOfLines={2}>{item.name}</Text>
-        <View style={styles.priceContainer}>
-          {item.discountPrice ? (
-            <>
-              <Text style={styles.discountPrice}>{item.discountPrice} MRU</Text>
-              <Text style={styles.originalPrice}>{item.price} MRU</Text>
-            </>
-          ) : (
-            <Text style={styles.price}>{item.price} MRU</Text>
-          )}
-        </View>
-        <TouchableOpacity 
-          style={styles.addToCartButton}
-          onPress={() => handleBuyNow(item)}
+      <BlurView intensity={80} tint="light" style={styles.cardBlur}>
+        <LinearGradient
+          colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.7)']}
+          style={styles.cardGradient}
         >
-          <AntDesign name="shoppingcart" size={20} color="#FFF" />
-          <Text style={styles.addToCartText}>أضف إلى السلة</Text>
-        </TouchableOpacity>
-      </View>
-      </TouchableOpacity>
+          {/* Product Image Section */}
+          <View style={styles.imageSection}>
+            <Image 
+              source={{ uri: item.images?.[0] || item.image }} 
+              style={styles.favoriteImage}
+              defaultSource={require('../assets/placeholder.jpeg')}
+            />
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.3)']}
+              style={StyleSheet.absoluteFill}
+            />
+            
+            {/* Price Tag */}
+            <View style={styles.priceTag}>
+              <BlurView intensity={90} tint="dark" style={styles.priceBlur}>
+                <Text style={styles.priceText}>
+                  {item.discountPrice || item.price} MRU
+                </Text>
+                {item.discountPrice && (
+                  <Text style={styles.originalPrice}>
+                    {item.price} MRU
+                  </Text>
+                )}
+              </BlurView>
+            </View>
+
+            {/* Favorite Button */}
+            <TouchableOpacity 
+              style={styles.heartButton}
+              onPress={() => removeFavorite(item._id || item.id)}
+            >
+              <BlurView intensity={90} tint="light" style={styles.heartBlur}>
+                <LinearGradient
+                  colors={['#ff6b6b', '#ff8787']}
+                  style={styles.heartGradient}
+                >
+                  <FontAwesome5 name="heart" size={16} color="#fff" />
+                </LinearGradient>
+              </BlurView>
+            </TouchableOpacity>
+          </View>
+
+          {/* Product Details */}
+          <View style={styles.detailsSection}>
+            <Text style={styles.productName} numberOfLines={2}>
+              {item.name}
+            </Text>
+
+            {/* Store Info */}
+            <View style={styles.storeInfo}>
+              <Image 
+                source={{ uri: item.store?.logo }}
+                style={styles.storeLogo}
+                defaultSource={require('../assets/placeholder.jpeg')}
+              />
+              <Text style={styles.storeName} numberOfLines={1}>
+                {item.store?.name}
+              </Text>
+            </View>
+
+            {/* Stats Row */}
+            <View style={styles.statsRow}>
+              <View style={styles.stat}>
+                <FontAwesome5 name="star" size={12} color="#FAC443" />
+                <Text style={styles.statText}>
+                  {item.rating?.toFixed(1) || '0.0'}
+                </Text>
+              </View>
+              <View style={styles.stat}>
+                <FontAwesome5 name="shopping-cart" size={12} color="#92ACEC" />
+                <Text style={styles.statText}>{item.sold || 0}</Text>
+              </View>
+            </View>
+
+            {/* Action Button */}
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => handleBuyNow(item)}
+            >
+              <LinearGradient
+                colors={['#004AAD', '#92ACEC']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.buttonGradient}
+              >
+                <Text style={styles.buttonText}>عرض المنتج</Text>
+                <FontAwesome5 name="arrow-left" size={14} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          {/* Decorative Elements */}
+          <View style={styles.decorativeElements}>
+            <LinearGradient
+              colors={['rgba(250,196,67,0.15)', 'rgba(255,215,0,0.1)']}
+              style={[styles.decorCircle, { transform: [{ rotate: '45deg' }] }]}
+            />
+            <LinearGradient
+              colors={['rgba(146,172,236,0.2)', 'rgba(0,74,173,0.15)']}
+              style={[styles.decorDot]}
+            />
+          </View>
+        </LinearGradient>
+      </BlurView>
+    </Animatable.View>
   );
 
   const renderSimilarProduct = ({ item }) => (
@@ -167,24 +331,89 @@ const FavoritesScreen = () => {
         productName: item.name 
       })}
     >
-      <Image 
-        source={{ uri: item.images?.[0] }} 
-        style={styles.similarImage}
-        defaultSource={require('../assets/placeholder.jpeg')}
-      />
-      <View style={styles.similarDetails}>
-        <Text style={styles.similarName} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.similarPrice}>
-          {item.discountPrice || item.price} MRU
-        </Text>
-      </View>
+      <BlurView intensity={80} tint="light" style={styles.similarBlur}>
+        <LinearGradient
+          colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.85)']}
+          style={styles.similarGradient}
+        >
+          <View style={styles.similarImageContainer}>
+            <Image 
+              source={{ uri: item.images?.[0] }} 
+              style={styles.similarImage}
+              defaultSource={require('../assets/placeholder.jpeg')}
+            />
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.3)']}
+              style={StyleSheet.absoluteFill}
+            />
+            
+            {/* Price Tag */}
+            <View style={styles.similarPriceTag}>
+              <BlurView intensity={90} tint="dark" style={styles.similarPriceBlur}>
+                <Text style={styles.similarPriceText}>
+                  {item.discountPrice || item.price} MRU
+                </Text>
+                {item.discountPrice && (
+                  <Text style={styles.similarOriginalPrice}>
+                    {item.price} MRU
+                  </Text>
+                )}
+              </BlurView>
+            </View>
+
+            {/* Similar Badge */}
+            <View style={styles.similarBadge}>
+              <BlurView intensity={90} tint="light" style={styles.similarBadgeBlur}>
+                <LinearGradient
+                  colors={['#FAC443', '#FFD700']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.similarBadgeGradient}
+                >
+                  <Text style={styles.similarBadgeText}>مشابه</Text>
+                </LinearGradient>
+              </BlurView>
+            </View>
+          </View>
+
+          <View style={styles.similarDetails}>
+            <Text style={styles.similarName} numberOfLines={2}>
+              {item.name}
+            </Text>
+            
+            <View style={styles.similarStoreInfo}>
+              <Image 
+                source={{ uri: item.store?.logo }}
+                style={styles.similarStoreLogo}
+                defaultSource={require('../assets/placeholder.jpeg')}
+              />
+              <Text style={styles.similarStoreName} numberOfLines={1}>
+                {item.store?.name}
+              </Text>
+            </View>
+
+            <View style={styles.similarStats}>
+              <View style={styles.similarStat}>
+                <FontAwesome5 name="star" size={10} color="#FAC443" />
+                <Text style={styles.similarStatText}>
+                  {item.rating?.toFixed(1) || '0.0'}
+                </Text>
+              </View>
+              <View style={styles.similarStat}>
+                <FontAwesome5 name="shopping-cart" size={10} color="#92ACEC" />
+                <Text style={styles.similarStatText}>{item.sold || 0}</Text>
+              </View>
+            </View>
+          </View>
+        </LinearGradient>
+      </BlurView>
     </TouchableOpacity>
   );
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3d4785" />
+        <ActivityIndicator size="large" color="#004AAD" />
       </View>
     );
   }
@@ -205,32 +434,85 @@ const FavoritesScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>المفضلة</Text>
-        {favorites.length > 0 && (
-          <Text style={styles.itemCount}>
-            {favorites.length} {favorites.length === 1 ? 'منتج' : 'منتجات'}
-          </Text>
-        )}
-      </View>
+      <Animated.View style={[styles.header, headerStyle]}>
+        <BlurView intensity={80} tint="light" style={styles.headerBlur}>
+          <LinearGradient
+            colors={['#004AAD', '#92ACEC']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.headerGradient}
+          >
+            {/* Full Header Content */}
+            <Animated.View style={[styles.headerContent, headerContentStyle]}>
+              <Text style={styles.headerTitle}>المفضلة</Text>
+              {favorites.length > 0 && (
+                <View style={styles.headerInfo}>
+                  <Text style={styles.itemCount}>
+                    {favorites.length} {favorites.length === 1 ? 'منتج' : 'منتجات'}
+                  </Text>
+                  <Text style={styles.totalPrice}>
+                    المجموع: {favorites.reduce((total, item) => total + (item.discountPrice || item.price), 0)} MRU
+                  </Text>
+                </View>
+              )}
+            </Animated.View>
 
-      <FlatList
+            {/* Minimized Header Content */}
+            <Animated.View style={[styles.minimizedHeader, minimizedHeaderStyle]}>
+              <View style={styles.logoContainer}>
+                <Text style={styles.logoText}>المفضلة</Text>
+                <View style={styles.logoUnderline} />
+              </View>
+            </Animated.View>
+
+            <View style={styles.decorativeElements}>
+              <LinearGradient
+                colors={['rgba(250,196,67,0.15)', 'rgba(255,215,0,0.1)']}
+                style={[styles.decorCircle, { transform: [{ rotate: '45deg' }] }]}
+              />
+              <LinearGradient
+                colors={['rgba(146,172,236,0.2)', 'rgba(0,74,173,0.15)']}
+                style={[styles.decorDot]}
+              />
+            </View>
+          </LinearGradient>
+        </BlurView>
+      </Animated.View>
+
+      <Animated.FlatList
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentContainerStyle={[
+          styles.favoritesList,
+          { 
+            paddingTop: 160 + insets.top,
+            paddingBottom: 100,
+          }
+        ]}
+        key="singleColumn"
         data={favorites}
         renderItem={renderFavoriteItem}
         keyExtractor={(item) => item._id || item.id}
-        numColumns={2}
-        contentContainerStyle={styles.favoritesList}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <AntDesign name="hearto" size={64} color="#ccc" />
+          <Animatable.View 
+            animation="fadeIn" 
+            style={styles.emptyContainer}
+          >
+            <FontAwesome5 name="heart" size={64} color="#92ACEC" />
             <Text style={styles.emptyText}>لا توجد منتجات في المفضلة</Text>
             <TouchableOpacity 
-              style={styles.shopNowButton}
               onPress={() => navigation.navigate('Home')}
+              style={styles.shopNowButton}
             >
-              <Text style={styles.shopNowText}>تسوق الآن</Text>
+              <LinearGradient
+                colors={['#004AAD', '#92ACEC']}
+                style={styles.shopNowGradient}
+              >
+                <Text style={styles.shopNowText}>تسوق الآن</Text>
+              </LinearGradient>
             </TouchableOpacity>
-          </View>
+          </Animatable.View>
         )}
         ListFooterComponent={() => similarProducts.length > 0 && (
           <View style={styles.similarSection}>
@@ -246,7 +528,7 @@ const FavoritesScreen = () => {
           </View>
         )}
       />
-      
+
       <CustomAlert
         visible={showAuthAlert}
         message="يجب تسجيل الدخول لإتمام هذه العملية"
@@ -274,152 +556,354 @@ const FavoritesScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f5f6fa',
   },
   header: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    height: 150,
+    overflow: 'hidden',
+  },
+  headerBlur: {
+    flex: 1,
+  },
+  headerGradient: {
+    flex: 1,
+    padding: 20,
+  },
+  headerContent: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 34,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#ffffff',
     textAlign: 'right',
+    textShadowColor: 'rgba(0, 0, 0, 0.15)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  headerInfo: {
+    marginTop: 8,
   },
   itemCount: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 16,
+    color: '#FAC443',
     textAlign: 'right',
+    fontWeight: '600',
+  },
+  totalPrice: {
+    fontSize: 14,
+    color: '#ffffff',
+    textAlign: 'right',
+    marginTop: 4,
+    opacity: 0.9,
+  },
+  decorativeElements: {
+    ...StyleSheet.absoluteFillObject,
+    pointerEvents: 'none',
+    opacity: 0.8,
+  },
+  decorCircle: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    top: -50,
+    left: -50,
+    opacity: 0.7,
+  },
+  decorDot: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    bottom: 20,
+    right: 40,
+    opacity: 0.8,
   },
   favoritesList: {
-    padding: 8,
+    padding: 16,
   },
   favoriteCard: {
-    flex: 1,
-    margin: 8,
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    marginBottom: 24,
+    borderRadius: 24,
     overflow: 'hidden',
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    backgroundColor: 'white',
   },
-  leftCard: {
-    marginRight: 4,
+  cardBlur: {
+    overflow: 'hidden',
+    borderRadius: 20,
   },
-  rightCard: {
-    marginLeft: 4,
+  cardGradient: {
+    borderRadius: 24,
+  },
+  imageSection: {
+    position: 'relative',
+    height: 220,
   },
   favoriteImage: {
     width: '100%',
-    height: 180,
+    height: '100%',
     resizeMode: 'cover',
+  },
+  priceTag: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    borderRadius: 15,
+    overflow: 'hidden',
+  },
+  priceBlur: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  priceText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  originalPrice: {
+    color: '#fff',
+    fontSize: 12,
+    textDecorationLine: 'line-through',
+    opacity: 0.7,
   },
   heartButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 20,
+    top: 12,
+    right: 12,
+    borderRadius: 25,
+    overflow: 'hidden',
+  },
+  heartBlur: {
+    padding: 4,
+  },
+  heartGradient: {
     padding: 8,
+    borderRadius: 20,
   },
-  favoriteDetails: {
-    padding: 12,
+  detailsSection: {
+    padding: 20,
+    backgroundColor: 'rgba(255,255,255,0.9)',
   },
-  favoriteName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+  productName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#004AAD',
+    marginBottom: 16,
     textAlign: 'right',
-    height: 40,
+    lineHeight: 24,
   },
-  priceContainer: {
+  storeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    backgroundColor: 'rgba(146,172,236,0.08)',
+    padding: 12,
+    borderRadius: 16,
+  },
+  storeLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginLeft: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(146,172,236,0.2)',
+  },
+  storeName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#004AAD',
+    textAlign: 'right',
+  },
+  statsRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: 16,
+    marginBottom: 20,
+  },
+  stat: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    backgroundColor: 'rgba(146,172,236,0.08)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6,
   },
-  price: {
-    fontSize: 16,
-    color: '#3d4785',
-    fontWeight: 'bold',
-  },
-  discountPrice: {
-    fontSize: 16,
-    color: '#3d4785',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  originalPrice: {
+  statText: {
     fontSize: 12,
-    color: '#999',
-    textDecorationLine: 'line-through',
+    color: '#004AAD',
+    fontWeight: '600',
   },
-  addToCartButton: {
-    backgroundColor: '#3d4785',
+  actionButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#004AAD',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  buttonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 10,
-    borderRadius: 8,
+    padding: 16,
+    gap: 10,
   },
-  addToCartText: {
+  buttonText: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '700',
   },
   similarSection: {
-    marginTop: 24,
-    paddingHorizontal: 16,
+    marginTop: 32,
+    marginBottom: 100,
   },
   similarTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
+    color: '#004AAD',
+    marginBottom: 20,
     textAlign: 'right',
+    paddingHorizontal: 16,
   },
   similarList: {
+    paddingLeft: 16,
     paddingBottom: 16,
   },
   similarCard: {
-    width: 140,
-    marginRight: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    width: width * 0.6,
+    marginRight: 16,
+    borderRadius: 24,
     overflow: 'hidden',
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    backgroundColor: 'white',
+  },
+  similarImageContainer: {
+    position: 'relative',
+    height: width * 0.5,
+    backgroundColor: '#f5f6fa',
   },
   similarImage: {
     width: '100%',
-    height: 140,
+    height: '100%',
     resizeMode: 'cover',
   },
+  similarPriceTag: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  similarPriceBlur: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  similarPriceText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  similarOriginalPrice: {
+    color: '#fff',
+    fontSize: 12,
+    textDecorationLine: 'line-through',
+    opacity: 0.7,
+    textAlign: 'right',
+  },
+  similarBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  similarBadgeBlur: {
+    overflow: 'hidden',
+    borderRadius: 12,
+  },
+  similarBadgeGradient: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  similarBadgeText: {
+    color: '#004AAD',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   similarDetails: {
-    padding: 12,
+    padding: 16,
+    backgroundColor: 'rgba(255,255,255,0.9)',
   },
   similarName: {
-    fontSize: 12,
-    color: '#333',
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#004AAD',
+    marginBottom: 12,
     textAlign: 'right',
-    height: 32,
+    lineHeight: 22,
   },
-  similarPrice: {
+  similarStoreInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    backgroundColor: 'rgba(146,172,236,0.08)',
+    padding: 10,
+    borderRadius: 12,
+  },
+  similarStoreLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginLeft: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(146,172,236,0.2)',
+  },
+  similarStoreName: {
+    flex: 1,
     fontSize: 14,
-    color: '#3d4785',
-    fontWeight: 'bold',
+    color: '#004AAD',
     textAlign: 'right',
+    fontWeight: '600',
+  },
+  similarStats: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  similarStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(146,172,236,0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  similarStatText: {
+    fontSize: 12,
+    color: '#004AAD',
+    fontWeight: '600',
   },
   emptyContainer: {
     flex: 1,
@@ -439,6 +923,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 8,
+  },
+  shopNowGradient: {
+    borderRadius: 8,
+    padding: 10,
   },
   shopNowText: {
     color: '#fff',
@@ -504,6 +992,37 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 16,
     textAlign: 'center',
+  },
+  minimizedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: HEADER_MIN_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 40 : StatusBar.currentHeight + 10,
+  },
+  logoContainer: {
+    alignItems: 'center',
+  },
+  logoText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#F9F8F4',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  logoUnderline: {
+    width: 20,
+    height: 2,
+    backgroundColor: '#FAC443',
+    borderRadius: 1,
+    marginTop: 2,
   },
 });
 

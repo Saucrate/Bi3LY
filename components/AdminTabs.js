@@ -137,23 +137,11 @@ const AdminTabs = () => {
         tabBarActiveTintColor: '#3d4785',
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: {
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 80,
+          height: 60,
           backgroundColor: '#ffffff',
-          borderTopLeftRadius: 40,
-          borderTopRightRadius: 40,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: 0.12,
-          shadowRadius: 5,
-          elevation: 5,
-          overflow: 'hidden',
         },
         tabBarLabelStyle: {
-          paddingBottom: 10,
+          paddingBottom: 5,
         },
       })}
     >

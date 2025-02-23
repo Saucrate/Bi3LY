@@ -171,8 +171,6 @@ const SellerTabs = () => {
           } else if (route.name === 'Settings') {
             iconName = 'settings-outline';
           }
-
-          return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#3d4785',
         tabBarInactiveTintColor: 'gray',

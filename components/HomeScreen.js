@@ -235,14 +235,18 @@ const HomeScreen = () => {
 
   // 5. Then your useEffects
   useEffect(() => {
-    loadHomeData();
-    loadUserProfile();
-    const unsubscribe = navigation.addListener('focus', () => {
-      loadHomeData();
-      loadUserProfile();
-    });
-    return unsubscribe;
-  }, [navigation]);
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        loadHomeData();
+        loadUserProfile();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, []);
 
   const loadHomeData = async () => {
     try {
@@ -1806,6 +1810,7 @@ const HomeScreen = () => {
         onLogin={handleLogin}
         onCancel={() => setShowAuthAlert(false)}
       />
+      {isLoading && <LoadingScreen />}
     </SafeAreaView>
   );
 };
